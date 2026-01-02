@@ -1,0 +1,3 @@
+obs_datetime,coin,perp_futures_mark_price,perp_futures_best_bid,perp_futures_best_ask
+2026-01-02T16:26:24.692316+00:00,BTC,90097.48,90099.5,90100.0
+2026-01-02T16:26:24.692316+00:00,ETH,3106.9,3107.25,3107.3
