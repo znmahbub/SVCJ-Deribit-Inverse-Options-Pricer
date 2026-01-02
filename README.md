@@ -122,9 +122,3 @@ High-level workflow:
 See the full walkthrough in:
 
 - `calibration_example.ipynb`
-
----
-
-## License
-
-Add a license that matches your intended distribution (e.g., MIT, BSD-3, or an academic/research license).
