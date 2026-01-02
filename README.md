@@ -125,19 +125,6 @@ See the full walkthrough in:
 
 ---
 
-## Reproducibility notes
-
-- Results depend on the **exact snapshot timestamp** (market data) and on the chosen filtering/weighting scheme.
-- The included CSV in `data/` is an example snapshot; for fresh results, run the snapshot collector again.
-
----
-
-## Citation
-
-If you use this code in academic work, please cite the accompanying thesis / documentation in `docs/`.
-
----
-
 ## License
 
 Add a license that matches your intended distribution (e.g., MIT, BSD-3, or an academic/research license).
