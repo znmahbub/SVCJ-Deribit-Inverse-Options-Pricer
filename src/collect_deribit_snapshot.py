@@ -37,7 +37,12 @@ def safe_float(x: Any) -> Optional[float]:
         return None
 
 
-def http_get(session: requests.Session, path: str, params: Dict[str, Any] | None = None, timeout: int = 30) -> Dict[str, Any]:
+def http_get(
+    session: requests.Session,
+    path: str,
+    params: Dict[str, Any] | None = None,
+    timeout: int = 30,
+) -> Dict[str, Any]:
     url = f"{DERIBIT_BASE}{path}"
     r = session.get(url, params=params or {}, timeout=timeout)
     r.raise_for_status()
@@ -52,7 +57,11 @@ def http_get(session: requests.Session, path: str, params: Dict[str, Any] | None
 # -----------------------------
 def get_instruments(session: requests.Session, currency: str) -> List[Dict[str, Any]]:
     # Needed for strike / expiry / option_type
-    payload = http_get(session, "/public/get_instruments", {"currency": currency, "kind": "option", "expired": "false"})
+    payload = http_get(
+        session,
+        "/public/get_instruments",
+        {"currency": currency, "kind": "option", "expired": "false"},
+    )
     return payload.get("result", [])
 
 
@@ -65,6 +74,14 @@ def get_book_summary_options(session: requests.Session, currency: str) -> List[D
 def get_ticker(session: requests.Session, instrument_name: str) -> Dict[str, Any]:
     payload = http_get(session, "/public/ticker", {"instrument_name": instrument_name})
     return payload.get("result", {})
+
+
+def get_perp_ticker(session: requests.Session, coin: str) -> Dict[str, Any]:
+    """
+    Get ticker info for the perpetual future (e.g., BTC-PERPETUAL, ETH-PERPETUAL).
+    """
+    instrument_name = f"{coin}-PERPETUAL"
+    return get_ticker(session, instrument_name)
 
 
 # -----------------------------
@@ -159,28 +176,23 @@ def main() -> int:
                 "timestamp": run_ts.isoformat(),
                 "instrument_name": name,
                 "underlying": underlying_price,
-                "underlying_name": underlying_name,  # NEW column you requested
+                "underlying_name": underlying_name,
                 "option_type": inst.get("option_type"),
                 "strike": safe_float(inst.get("strike")),
                 "expiry_datetime": expiry_iso,
                 "time_to_maturity": ttm_years,
-
                 "bid_price": bid,
                 "ask_price": ask,
                 "mark_price": mark,
                 "mid_price": mid,
-
                 "futures_price": futures_price,
                 "futures_instrument_name": futures_instrument_name,
-
                 "implied_volatility": implied_vol,
                 "delta": safe_float(greeks.get("delta")),
                 "vega": safe_float(greeks.get("vega")),
-
                 "open_interest": safe_float(summ.get("open_interest")),
                 "volume": safe_float(summ.get("volume")),
                 "bid_ask_spread": spread,
-
                 # extra useful fields (kept, but you can remove if you want)
                 "currency": ccy,
                 "index_price": index_price,
@@ -221,6 +233,30 @@ def main() -> int:
     outpath = os.path.join(args.outdir, f"deribit_options_snapshot_{run_ts_str}.csv")
     df.to_csv(outpath, index=False)
     print(f"Wrote {len(df):,} rows to: {outpath}")
+
+    # -----------------------------
+    # Perpetual futures snapshot (overwrite each run)
+    # -----------------------------
+    perp_rows: List[Dict[str, Any]] = []
+    for coin in currencies:
+        perp_t = get_perp_ticker(session, coin)
+        perp_rows.append(
+            {
+                "obs_datetime": run_ts.isoformat(),
+                "coin": coin,
+                "perp_futures_mark_price": safe_float(perp_t.get("mark_price")),
+                "perp_futures_best_bid": safe_float(perp_t.get("best_bid_price")),
+                "perp_futures_best_ask": safe_float(perp_t.get("best_ask_price")),
+            }
+        )
+        # small sleep to be polite, though it's only 2 calls
+        time.sleep(args.sleep)
+
+    perp_df = pd.DataFrame(perp_rows)
+    perp_outpath = os.path.join(args.outdir, "perpetual_futures_prices.csv")
+    perp_df.to_csv(perp_outpath, index=False)
+    print(f"Wrote perpetual futures snapshot to: {perp_outpath}")
+
     return 0
 
 
