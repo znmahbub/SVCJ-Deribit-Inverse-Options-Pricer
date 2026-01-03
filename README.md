@@ -1,124 +1,158 @@
-# Deribit Inverse Options Pricing & Calibration (FFT)
+# Deribit Inverse Options — FFT Pricing & Calibration
 
-A research codebase (thesis project) for **pricing and calibrating European *inverse* options** (coin-settled options) using the **Carr–Madan (1999) FFT** approach.
+This repository contains the core research code behind a thesis project on **pricing and calibrating Deribit-style inverse options** under **affine stochastic volatility models with jumps (SVCJ)**.
 
-The project contains:
+The code is organized around a simple pipeline:
 
-- An FFT pricer for inverse calls/puts under **Black-76**, **Heston**, and **SVCJ (stochastic volatility with correlated jumps)**.
-- A lightweight data collector that pulls **Deribit** option surface snapshots into CSV.
-- Calibration utilities to clean the snapshot data and fit model parameters via **weighted least squares**.
-- Example notebooks demonstrating pricing and calibration workflows.
-
-> **Inverse option pricing note:** prices are produced in **coin units** (e.g., BTC) by converting USD-denominated FFT call prices using the current futures price and put–call parity.
+1. **Ingest Deribit option snapshot data** (either collected via the included API script or loaded from CSV snapshots).
+2. **Filter / clean** the cross-section down to “reasonably liquid” quotes.
+3. **Price inverse options in coin units** using a **Carr–Madan FFT** engine (one FFT produces a full strike grid for a given expiry).
+4. **Calibrate model parameters** (Black, Heston, SVCJ) by solving a **weighted nonlinear least-squares** problem on coin-denominated prices.
 
 ---
 
 ## Repository layout
 
-```
-thesis/
-  src/
-    inverse_fft_pricer.py        # Carr–Madan FFT engine + model characteristic functions
-    calibration.py               # Cleaning + weighted-LS calibration (Black/Heston/SVCJ)
-    collect_deribit_snapshot.py  # CLI to fetch Deribit option snapshots to CSV
-  data/
-    *.csv                        # Example snapshot(s)
-  docs/
-    *.pdf                        # Thesis / background documentation
-  pricing_examples.ipynb
-  calibration_example.ipynb
-```
+- `src/`
+  - `inverse_fft_pricer.py` — Carr–Madan FFT pricer + characteristic functions + (semi-)analytical Black and Heston prices for testing
+  - `calibration.py` — filtering/cleaning + fast batch pricing + weighted least-squares calibration
+  - `collect_deribit_snapshot.py` — Deribit public-API snapshot collector (options + perp futures snapshot)
+- `docs/`
+  - `MASTERS_DIPLOM.pdf` — the thesis PDF (context + methodology)
+- `data/`
+  - `deribit_options_snapshot_*.csv` — timestamped option cross-sections (bid/ask/mid/greeks/OI, etc.)
+  - `perpetual_futures_prices.csv` — perp mark/bid/ask snapshots
+
+Notebooks:
+- `pricing_examples.ipynb` - minimal pricing example using the Black, Heston and SVCJ models
+- `calibration_example.ipynb` - minimal calibration example
+- `calibrate_all.ipynb` - calibration over each of the collected Deribit snapshots in the `data` folder
 
 ---
 
-## Installation
+## Core module: `src/inverse_fft_pricer.py`
 
-### 1) Create a virtual environment (recommended)
+### What it implements
+A **fast Fourier transform (FFT) engine** for **European option pricing on a futures price** under:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate     # macOS/Linux
-# .venv\Scripts\activate    # Windows PowerShell
-```
+- **Black (Black–76, r = 0)** with constant volatility
+- **Heston** stochastic volatility
+- **SVCJ** stochastic volatility with **correlated jumps** in returns and variance
 
-### 2) Install dependencies
+The implementation follows the **Carr–Madan (1999)** approach:
 
-```bash
-pip install -r requirements.txt
-```
+- Build a frequency grid `v_j = j * eta`
+- Evaluate the model characteristic function at a shifted argument `v - i(α+1)` (exponential damping)
+- Apply quadrature weights (trapezoid or Simpson)
+- FFT to obtain a **grid of (strike, call-price)** pairs in USD terms
 
-### 3) Make the `src/` modules importable
+### Inverse-option convention (coin-denominated pricing)
+Deribit inverse options are quoted in **coin units**. The pricer therefore:
+- Computes a **USD call price grid** on strikes
+- Interpolates to the requested strike(s)
+- Converts to **coin prices** via a simple scaling by the current futures price `F0`
+- Produces inverse puts via **inverse put–call parity** inside the main wrapper
 
-From the `thesis/` directory, either:
+### Numerical / implementation details
+- **Quadrature choices**: trapezoidal or Simpson weights (Simpson requires even `N`)
+- **Caching**:
+  - Gauss–Legendre nodes/weights are cached for repeated quadratures
+  - FFT call-price grids can be cached by `(model, T, F0, params, FFT grid)` — useful for repeated pricing at fixed parameters, but typically disabled during calibration (low hit rate)
+- **Heston branch handling**: enforces a stable branch for the complex square root discriminant (mitigates discontinuities)
+- **SVCJ jump component**: evaluates an integral term via **Gauss–Legendre quadrature**; includes basic domain checks to avoid singularities in the jump MGF
 
-```bash
-export PYTHONPATH="$PWD/src"
-```
-
-or (in notebooks) add `thesis/src` to `sys.path`.
-
----
-
-## Quickstart
-
-### Price an inverse option (FFT)
-
-```python
-from src.inverse_fft_pricer import price_inverse_option
-
-# Example inputs (coin = BTC style)
-price_coin = price_inverse_option(
-    option_type="call",   # "call" or "put"
-    K=40000.0,            # strike
-    T=30/365,             # maturity in years
-    F0=39500.0,           # current futures price
-    r=0.0,                # rate (often ~0 for crypto short maturities)
-    model="heston",       # "black", "heston", or "svcj"
-    params={              # model parameters depend on chosen model
-        "kappa": 2.0,
-        "theta": 0.04,
-        "sigma": 0.6,
-        "rho": -0.5,
-        "v0": 0.04,
-    },
-)
-print(price_coin)
-```
-
-For additional worked examples, see:
-
-- `pricing_examples.ipynb`
+### Built-in “reference” pricers (for sanity checks)
+To validate the FFT logic and characteristic functions:
+- **Analytic Black–76 call/put** (`black76_call_price`, `black76_put_price`)
+- **Semi-analytical Heston call/put** via Gil–Pelaez inversion (`heston_call_price`, `heston_put_price`)
+  - The Heston *put* reference is computed **directly** (not via put–call parity), specifically for testing correctness.
 
 ---
 
-## Collect a Deribit snapshot (CSV)
+## Core module: `src/calibration.py`
 
-The collector hits Deribit public endpoints and writes a timestamped CSV to `data/`:
+### What it implements
+A complete **data → calibration** pipeline around the FFT pricer.
 
-```bash
-python src/collect_deribit_snapshot.py --currency BTC --outdir data
-# or both BTC + ETH:
-python src/collect_deribit_snapshot.py --currency BOTH --outdir data
-```
+#### 1) Filtering and cleaning
+`filter_liquid_options(df, ...)` enforces:
+- Required fields present (quotes, expiry, forward proxy inputs, greeks/OI, etc.)
+- Positive time-to-maturity, bid/ask sanity (`ask >= bid`), finite numerics
+- Optional screens:
+  - max relative spread
+  - moneyness band (strike relative to a per-expiry forward proxy)
+  - minimum open interest / vega thresholds
+  - optional removal of synthetic underlyings
 
-Helpful flags:
+It also constructs:
+- `mid_price_clean = (bid + ask)/2`
+- `spread`, `rel_spread`
+- A per-expiry forward proxy `F0` (median futures price within expiry bucket)
+- `moneyness = K / F0` and `log_moneyness`
 
-- `--max-instruments N` for quick tests (0 = no cap)
-- `--sleep SECONDS` to be extra rate-limit friendly
+#### 2) Fast batch pricing across a dataset
+To price many options efficiently, the module:
+- Builds a **per-expiry pricing plan**
+- For each expiry:
+  - runs **one FFT call** to price calls across strikes
+  - obtains puts via inverse put–call parity *within that expiry bucket*  
+This reduces calibration cost significantly because one FFT covers a full strike slice.
+
+It also supports **dynamic log-strike centering**:
+- Adjusts the FFT grid location (`b`) around the median strike of an expiry bucket to keep the strike grid “centered” on the data (improves interpolation quality and reduces the need for huge grids).
+
+#### 3) Weighted least-squares calibration
+`calibrate_model(df, model, ...)` solves:
+
+- Objective: minimize weighted residuals  
+  `r_i = w_i * (P_model_coin(i) - P_market_coin(i))`
+
+- Weight model (`WeightConfig`) can combine:
+  - spread-based downweighting (tighter markets matter more)
+  - vega-based scaling
+  - open-interest scaling
+  Each component has a power and stabilization epsilons; weights can be capped.
+
+- Parameter constraints are enforced through **reparameterization**:
+  - positive parameters via `log`
+  - correlations via `arctanh/tanh` mapping into `(-1, 1)`
+- Additional model constraints:
+  - **Feller-type** constraint penalty for Heston/SVCJ
+  - **moment/existence** constraint penalty for SVCJ jump term stability
+
+- Uses `scipy.optimize.least_squares` with bounded variables and robust fallback penalties when pricing fails.
+
+The module returns a compact `CalibrationResult` including parameter estimates and fit metrics (RMSE/MAE in coin units).
 
 ---
 
-## Calibrate a model to snapshot data
+## Data collection: `src/collect_deribit_snapshot.py`
 
-Calibration utilities live in `src/calibration.py` and are designed to work with the FFT pricer.
+This script pulls a cross-sectional snapshot from the **Deribit public API**, assembling:
 
-High-level workflow:
+- Instrument metadata (strike, expiry, option type)
+- Book summary by currency (bid/ask/mid, open interest, volume, mark IV)
+- Per-instrument ticker calls (for Greeks like delta/vega)
+- A separate small snapshot of **perpetual futures** (mark/bid/ask)
 
-1. Load a snapshot CSV as a `pandas.DataFrame`
-2. Filter to liquid options (`filter_liquid_options`)
-3. Choose a model (`black`, `heston`, `svcj`)
-4. Fit parameters via weighted least squares (`calibrate_model`)
+It writes:
+- `data/deribit_options_snapshot_<timestamp>.csv`
+- `data/perpetual_futures_prices.csv`
 
-See the full walkthrough in:
+The output is designed to match the fields expected by `filter_liquid_options()` and downstream calibration.
 
-- `calibration_example.ipynb`
+---
+
+## Notebooks (what they contain)
+
+- `pricing_examples.ipynb`  
+  Demonstrates inverse call/put pricing across strikes for Black, Heston, and SVCJ using the FFT pricer.
+
+- `calibration_example.ipynb`  
+  Walks through a single-snapshot workflow: load → filter → calibrate models → price train/test sets → produce diagnostic plots (true vs model).
+
+- `calibrate_all.ipynb`  
+  Batch-runs calibration across multiple stored snapshots for BTC and ETH, collecting:
+  - time series of fitted parameters (by model)
+  - time series of fit metrics  
+  Includes basic parallelization patterns to speed up multi-snapshot processing.
