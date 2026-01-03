@@ -170,13 +170,13 @@ Additional columns (if present) may be used for initial guesses or extra filteri
 
 ### Weighting
 
-`WeightConfig` controls per-row weights \(w_i\) used in the residual:
+`WeightConfig` controls per-row weights $w_i$ used in the residual:
 ```math
 r_i = w_i \cdot (P^{model}_{coin,i} - P^{mkt}_{coin,i})
 ```
 
 Key behavior:
-- `use_spread=True` downweights wide markets via \((spread+\varepsilon)^{-p}\).
+- `use_spread=True` downweights wide markets via $(spread+\varepsilon)^{-p}$.
 - `use_vega=True` and `use_open_interest=True` scale weights by powers of `vega` and `open_interest`.
 - `cap` limits extreme weights.
 
