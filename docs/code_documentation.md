@@ -23,16 +23,16 @@ Deribit inverse options are quoted in **coin** (e.g., BTC). In this project:
   `C_usd(K)`.
 
 - The module converts to **inverse (coin) call prices** by:
-  \[
+  $$
   C_{coin}(K) = \frac{C_{usd}(K)}{F_0}.
-  \]
+  $$
 
 - Inverse put prices are obtained using **inverse put–call parity**:
-  \[
+  $$
   C_{coin}(K) - P_{coin}(K) = 1 - \frac{K}{F_0},
   \quad\Rightarrow\quad
   P_{coin}(K) = C_{coin}(K) - \left(1-\frac{K}{F_0}\right).
-  \]
+  $$
   The code floors puts at 0.
 
 ### Time to maturity
@@ -311,13 +311,13 @@ What it does:
 
 5. Adds constraint penalties (as extra residual components):
    - For Heston and SVCJ: a soft **Feller-type** penalty:
-     \[
+     $$
      \sigma_v^2 \le 2\kappa\theta - \varepsilon
-     \]
+     $$
    - For SVCJ: a soft “moment stability” penalty:
-     \[
+     $$
      1 - \ell_v \rho_j \ge \varepsilon
-     \]
+     $$
    These are implemented as nonnegative violations multiplied by `constraint_penalty`.
 
 6. Returns `CalibrationResult(model, params_hat, success, message, nfev, rmse, mae)` computed on coin prices.
