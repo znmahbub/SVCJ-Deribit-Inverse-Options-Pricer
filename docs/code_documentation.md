@@ -1,12 +1,6 @@
 # Code documentation
 
 This document explains **what the main Python modules do** and how the key functions fit together.
-It is meant for **readers of the codebase** (or future-you) who want a map of the pricing/calibration
-pipeline, the numerical conventions, and the responsibilities of each function — **not** a usage manual.
-
-Relevant “math spec” documents:
-- `docs/Documentation - Pricing, Filtering, Weighting and Calibration for Deribit Inverse Options.pdf`
-- `docs/MASTERS_DIPLOM.pdf`
 
 ---
 
@@ -177,9 +171,9 @@ Additional columns (if present) may be used for initial guesses or extra filteri
 ### Weighting
 
 `WeightConfig` controls per-row weights \(w_i\) used in the residual:
-\[
+```math
 r_i = w_i \cdot (P^{model}_{coin,i} - P^{mkt}_{coin,i})
-\]
+```
 
 Key behavior:
 - `use_spread=True` downweights wide markets via \((spread+\varepsilon)^{-p}\).
@@ -247,9 +241,9 @@ These functions are internal but are central to performance:
 
 - `_choose_fft_params_for_group(base, strikes)`
   - Computes a `b` that centers the FFT strike grid around the median strike of the group:
-    \[
+    ```math
     b \approx \log(\mathrm{median}(K)) - \tfrac{1}{2}N\lambda
-    \]
+    ```
   - This is used when `dynamic_b=True`.
 
 - `_build_pricing_plan(df, ...)`
@@ -312,13 +306,13 @@ What it does:
 
 5. Adds constraint penalties (as extra residual components):
    - For Heston and SVCJ: a soft **Feller-type** penalty:
-     $$
+     ```math
      \sigma_v^2 \le 2\kappa\theta - \varepsilon
-     $$
+     ```
    - For SVCJ: a soft “moment stability” penalty:
-     $$
+     ```math
      1 - \ell_v \rho_j \ge \varepsilon
-     $$
+     ```
    These are implemented as nonnegative violations multiplied by `constraint_penalty`.
 
 6. Returns `CalibrationResult(model, params_hat, success, message, nfev, rmse, mae)` computed on coin prices.
