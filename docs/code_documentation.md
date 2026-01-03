@@ -1,4 +1,4 @@
-# Code documentation (research-facing)
+# Code documentation
 
 This document explains **what the main Python modules do** and how the key functions fit together.
 It is meant for **readers of the codebase** (or future-you) who want a map of the pricing/calibration
@@ -23,16 +23,16 @@ Deribit inverse options are quoted in **coin** (e.g., BTC). In this project:
   `C_usd(K)`.
 
 - The module converts to **inverse (coin) call prices** by:
-  $$
+  $
   C_{coin}(K) = \frac{C_{usd}(K)}{F_0}.
-  $$
+  $
 
 - Inverse put prices are obtained using **inverse put–call parity**:
-  $$
+  $
   C_{coin}(K) - P_{coin}(K) = 1 - \frac{K}{F_0},
   \quad\Rightarrow\quad
   P_{coin}(K) = C_{coin}(K) - \left(1-\frac{K}{F_0}\right).
-  $$
+  $
   The code floors puts at 0.
 
 ### Time to maturity
