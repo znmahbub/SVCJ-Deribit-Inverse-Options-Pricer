@@ -6,14 +6,14 @@ This module implements a fast Fourier transform (FFT) based pricer for
 European options on a futures contract under several models: Black,
 Heston and the stochastic volatility with correlated jumps (SVCJ) model.
 It follows the Carr–Madan (1999) algorithm as described in the user's
-thesis and detailed in Appendix A of the supplied PDF.
+thesis and detailed in Appendix A of the supplied PDF.
 
 The core idea is to compute a grid of regular (USD-denominated) call
 prices across strikes via the FFT, then convert to inverse (coin)
 denominated prices using a simple division by the current futures price
 and put–call parity. A single FFT yields
 prices for an entire grid of strikes, which makes the procedure very
-efficient when calibrating a model to cross‑sectional option data.
+efficient when calibrating a model to cross-sectional option data.
 
 The module exposes the following high-level function:
 
@@ -34,7 +34,7 @@ Internally, the module uses three layers:
   - **Carr–Madan FFT engine** that discretises the integral
     representation of the damped call price, applies quadrature weights
     (trapezoidal or Simpson), and uses an FFT to recover prices across a
-    log‑strike grid.
+    log-strike grid.
   - **Wrapper** converting the resulting USD call prices to inverse
     option prices and performing interpolation for arbitrary strikes.
 
@@ -54,6 +54,12 @@ from functools import lru_cache
 import numpy as np
 from numpy.fft import fft  # Use numpy's FFT for speed
 
+@lru_cache(maxsize=None)
+def _leggauss_cached(n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return cached Gauss–Legendre nodes and weights for order ``n``."""
+    return np.polynomial.legendre.leggauss(int(n))
+
+
 ###############################################################################
 # Dataclass for FFT configuration
 ###############################################################################
@@ -65,7 +71,7 @@ class FFTParams:
     Attributes
     ----------
     N : int
-        Number of grid points in the frequency/log‑strike domain.  Must be a
+        Number of grid points in the frequency/log-strike domain.  Must be a
         power of two for FFT efficiency.
     alpha : float
         Exponential damping factor.  Must be chosen so that the characteristic
@@ -74,9 +80,9 @@ class FFTParams:
     eta : float
         Spacing of the frequency grid.  The maximum frequency is
         ``v_max = (N - 1) * eta``.  Together with ``N`` it determines the
-        spacing of the log‑strike grid via ``lambda_ = 2*pi/(N*eta)``.
+        spacing of the log-strike grid via ``lambda_ = 2*pi/(N*eta)``.
     b : float
-        Minimum log‑strike on the output grid.  The output strikes are
+        Minimum log-strike on the output grid.  The output strikes are
         ``exp(b + u*lambda_)`` for ``u = 0, …, N-1``.  Choose ``b`` so
         that the grid covers the strikes of interest.
     use_simpson : bool
@@ -119,7 +125,7 @@ def cf_black(u: np.ndarray, T: float, F0: float, sigma: float) -> np.ndarray:
     np.ndarray
         The characteristic function evaluated at ``u``.
     """
-    # For the Black model under the futures measure, log‑futures follow
+    # For the Black model under the futures measure, log-futures follow
     # dX_t = -0.5*sigma^2 dt + sigma dW_t.  The solution is
     # X_T = X_0 - 0.5*sigma^2 T + sigma (W_T - W_0).
     # Thus φ(u) = exp(i*u*(log(F0) - 0.5*sigma^2*T) - 0.5*sigma^2*u^2*T).
@@ -138,7 +144,7 @@ def cf_heston(
     rho: float,
     v0: float,
 ) -> np.ndarray:
-    """Characteristic function of log‑futures under the Heston model.
+    """Characteristic function of log-futures under the Heston model.
 
     Parameters
     ----------
@@ -149,7 +155,7 @@ def cf_heston(
     F0 : float
         Current futures price.
     kappa, theta, sigma_v, rho, v0 : float
-        Heston parameters: mean reversion speed, long‑run variance, vol of vol,
+        Heston parameters: mean reversion speed, long-run variance, vol of vol,
         correlation, and initial variance.
 
     Returns
@@ -179,8 +185,16 @@ def cf_heston(
         / (sigma_v * sigma_v)
         * ((kappa - rho * sigma_v * iu - d) * tau - 2 * log_term)
     )
-    # Characteristic function
-    return np.exp(A + B * v0 + iu * np.log(F0))
+    # Characteristic function (guard against numerical blow-ups)
+    z = A + B * v0 + iu * np.log(F0)
+    # If the real part is too large, exp() will overflow; treat as invalid.
+    if np.any(~np.isfinite(z)) or np.any(np.real(z) > 700.0):
+        return np.full_like(u, np.nan, dtype=np.complex128)
+    with np.errstate(over='ignore', invalid='ignore'):
+        phi = np.exp(z)
+    if np.any(~np.isfinite(phi)):
+        phi = np.full_like(u, np.nan, dtype=np.complex128)
+    return phi
 
 
 def cf_svcj(
@@ -199,7 +213,7 @@ def cf_svcj(
     rho_j: float,
     quad_nodes: int = 32,
 ) -> np.ndarray:
-    """Characteristic function of log‑futures under the SVCJ model.
+    """Characteristic function of log-futures under the SVCJ model.
 
     Parameters
     ----------
@@ -214,7 +228,7 @@ def cf_svcj(
     lam : float
         Jump intensity.
     ell_y, sigma_y : float
-        Mean and standard deviation of the log‑return jump conditional on the
+        Mean and standard deviation of the log-return jump conditional on the
         variance jump.
     ell_v : float
         Mean of the variance jump (exponential distribution).
@@ -263,7 +277,7 @@ def cf_svcj(
     kappa_F = np.exp(ell_y + 0.5 * sigma_y * sigma_y) / (1.0 - ell_v * rho_j) - 1.0
     # Gauss–Legendre quadrature on [0, τ]
     # Nodes x in [-1,1], weights w.  Map to s in [0, τ] via s = 0.5*τ*(x+1).
-    nodes, weights = np.polynomial.legendre.leggauss(quad_nodes)
+    nodes, weights = _leggauss_cached(int(quad_nodes))
     s = 0.5 * tau * (nodes + 1.0)
     ds = 0.5 * tau * weights  # weight factor includes Jacobian
     # Compute B(s; u) for all s.  Shape of result (len(s), len(u)) using broadcasting.
@@ -284,14 +298,26 @@ def cf_svcj(
     # With Z ~ Exp(mean=ell_v) and Y|Z ~ N(ell_y + rho_j*Z, sigma_y^2), we have
     # E[exp(iu Y + B Z)] = exp(iu*ell_y - 0.5*sigma_y^2*u^2) / (1 - ell_v*(B + iu*rho_j)).
     denom = 1.0 - ell_v * (B_s + iu[np.newaxis, :] * rho_j)
-    M = np.exp(iu[np.newaxis, :] * ell_y - 0.5 * (sigma_y * sigma_y) * (u ** 2)[np.newaxis, :]) / denom
+    # If the jump MGF denominator gets too close to zero, pricing becomes unstable.
+    if (not np.all(np.isfinite(denom))) or np.min(np.abs(denom)) < 1e-12:
+        phi = np.full_like(u, np.nan, dtype=np.complex128)
+        return phi[0] if scalar_input else phi
+    num = np.exp(iu * ell_y - 0.5 * (sigma_y * sigma_y) * (u ** 2))
+    M = num[np.newaxis, :] / denom
     # Integrand: M(u,B(s)) - 1 - i*u*κF
     integrand = M - 1.0 - (iu[np.newaxis, :] * kappa_F)
     # Integrate over s: sum over axis 0
     A_jump = lam * np.sum(ds[:, np.newaxis] * integrand, axis=0)
     # Combine A and B to get φ
     A = A_diff + A_jump
-    phi = np.exp(A + B_tau * v0 + iu * np.log(F0))
+    z = A + B_tau * v0 + iu * np.log(F0)
+    if np.any(~np.isfinite(z)) or np.any(np.real(z) > 700.0):
+        phi = np.full_like(u, np.nan, dtype=np.complex128)
+        return phi[0] if scalar_input else phi
+    with np.errstate(over='ignore', invalid='ignore'):
+        phi = np.exp(z)
+    if np.any(~np.isfinite(phi)):
+        phi = np.full_like(u, np.nan, dtype=np.complex128)
     return phi[0] if scalar_input else phi
 
 ###############################################################################
@@ -324,6 +350,17 @@ def _quadrature_weights(N: int, use_simpson: bool) -> np.ndarray:
         w[0] = 0.5
         w[-1] = 0.5
         return w
+
+
+@lru_cache(maxsize=None)
+def _quadrature_weights_cached(N: int, use_simpson: bool) -> np.ndarray:
+    """Cached quadrature weights for the discretised Carr–Madan integral.
+
+    The underlying weight construction is performed by :func:`_quadrature_weights`.
+    Caching avoids rebuilding the same length-N weight vector across repeated FFT
+    evaluations during calibration.
+    """
+    return _quadrature_weights(int(N), bool(use_simpson))
 
 
 def carr_madan_call_fft(
@@ -365,22 +402,36 @@ def carr_madan_call_fft(
     # Compute Ψ(v) = φ(v - i*(α+1)) / (α^2 + α - v^2 + i(2α+1)v)
     u_shift = v - 1j * (alpha + 1.0)
     phi_vals = cf(u_shift, T, F0, *params)
+    if not np.all(np.isfinite(phi_vals)):
+        lambda_ = 2.0 * np.pi / (N * eta)
+        k = b + j * lambda_
+        K_grid = np.exp(k)
+        C_grid = np.full(N, np.nan, dtype=float)
+        return K_grid, C_grid
     denom = (alpha * alpha + alpha - v * v) + 1j * (2.0 * alpha + 1.0) * v
-    psi = phi_vals / denom
+    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
+        psi = phi_vals / denom
+    if not np.all(np.isfinite(psi)):
+        lambda_ = 2.0 * np.pi / (N * eta)
+        k = b + j * lambda_
+        K_grid = np.exp(k)
+        C_grid = np.full(N, np.nan, dtype=float)
+        return K_grid, C_grid
     # Quadrature weights and scaling by η
-    w = _quadrature_weights(N, fft_params.use_simpson)
+    w = _quadrature_weights_cached(N, fft_params.use_simpson)
     # Sequence x_j = e^{-i v_j b} ψ(v_j) w_j η
-    x = np.exp(-1j * v * b) * psi * w * eta
-    # FFT to compute damped call values on log‑strike grid
+    with np.errstate(invalid='ignore', over='ignore'):
+        x = np.exp(-1j * v * b) * psi * w * eta
+    # FFT to compute damped call values on log-strike grid
     y = fft(x)
-    # Log‑strike grid k_u = b + u*λ, λη = 2π/N
+    # Log-strike grid k_u = b + u*λ, λη = 2π/N
     lambda_ = 2.0 * np.pi / (N * eta)
     k = b + j * lambda_
     # Damped call prices c(k_u) = (1/π) Re(y_u)
     c = np.real(y) / np.pi
     # Regular call prices C(K) = e^{-α k} c(k)
     C = np.exp(-alpha * k) * c
-    # Convert log‑strike to strike K
+    # Convert log-strike to strike K
     K_grid = np.exp(k)
     return K_grid, C
 
@@ -403,6 +454,7 @@ def _cache_key(model_name: str, T: float, F0: float, params: tuple, fft_params: 
     )
 
 
+
 def _get_pricing_grid(
     model_name: str,
     cf: callable,
@@ -410,11 +462,26 @@ def _get_pricing_grid(
     F0: float,
     params: tuple,
     fft_params: FFTParams,
+    *,
+    use_cache: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Retrieve or compute the pricing grid for a given maturity and parameter set.
 
-    Uses a least‑recently‑used cache to avoid redundant FFT evaluations.
+    Parameters
+    ----------
+    use_cache:
+        If True, use the global LRU cache to reuse FFT grids. During calibration
+        the parameter vector changes almost every evaluation, so caching is often
+        counterproductive (high memory churn, low hit rate). Set ``use_cache=False``
+        to bypass caching while preserving all numerical logic.
+
+    Notes
+    -----
+    The returned grid is (K_grid, C_grid) where C_grid are USD call prices.
     """
+    if not use_cache:
+        return carr_madan_call_fft(cf, T, F0, params, fft_params)
+
     key = _cache_key(model_name, T, F0, params, fft_params)
     # Use functools.lru_cache by wrapping around this helper
     return _cached_pricing_grid(key, cf, T, F0, params, fft_params)
@@ -446,6 +513,7 @@ def price_inverse_option(
     *,
     option_type: str = "call",
     fft_params: FFTParams | None = None,
+    use_cache: bool = True,
     return_grid: bool = False,
 ) -> tuple[np.ndarray, np.ndarray] | np.ndarray:
     """Price European inverse call or put options under the specified model.
@@ -455,7 +523,7 @@ def price_inverse_option(
     model : {'black', 'heston', 'svcj'}
         Which model to use.  Case insensitive.
     K : float or array_like
-        Strike(s) in USD per coin.  Can be a scalar or a 1‑D array.
+        Strike(s) in USD per coin.  Can be a scalar or a 1-D array.
     T : float
         Time to maturity in years.
     F0 : float
@@ -525,7 +593,14 @@ def price_inverse_option(
     else:
         raise ValueError(f"Unsupported model '{model}'. Choose from 'black', 'heston', 'svcj'.")
     # Compute or fetch pricing grid
-    K_grid, C_grid = _get_pricing_grid(model_lower, cf_func, T, F0, param_tuple, fft_params)
+    try:
+        K_grid, C_grid = _get_pricing_grid(model_lower, cf_func, T, F0, param_tuple, fft_params, use_cache=use_cache)
+    except Exception:
+        K_arr = np.asarray(K, dtype=float)
+        nan_out = np.full_like(K_arr, np.nan, dtype=float)
+        if return_grid:
+            return nan_out, np.array([], dtype=float), np.array([], dtype=float)
+        return nan_out
     # Interpolate USD call prices to requested strikes
     K = np.asarray(K, dtype=float)
     # Ensure monotonic ascending grid for interpolation; the FFT grid is ascending by construction
@@ -638,7 +713,7 @@ def _heston_p1p2(
     lnK = np.log(K_arr)
 
     # Gauss–Legendre nodes on [0, u_max]
-    nodes, weights = np.polynomial.legendre.leggauss(int(n))
+    nodes, weights = _leggauss_cached(int(n))
     u = 0.5 * u_max * (nodes + 1.0)
     w = 0.5 * u_max * weights
 
