@@ -1,6 +1,6 @@
 # Deribit Inverse Options — FFT Pricing & Calibration
 
-This repository contains the core research code behind a thesis project on **pricing and calibrating Deribit-style inverse options** under **affine stochastic volatility models with jumps (SVCJ)**.
+This repository contains the core code behind a thesis project on **pricing and calibrating Deribit-style inverse options** under **affine stochastic volatility models with jumps (SVCJ)**.
 
 The code is organized around a simple pipeline:
 
