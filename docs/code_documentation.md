@@ -23,16 +23,17 @@ Deribit inverse options are quoted in **coin** (e.g., BTC). In this project:
   `C_usd(K)`.
 
 - The module converts to **inverse (coin) call prices** by:
-  $
+  ```math
   C_{coin}(K) = \frac{C_{usd}(K)}{F_0}.
-  $
+  ```
 
 - Inverse put prices are obtained using **inverse put–call parity**:
-  $
+  ```math
   C_{coin}(K) - P_{coin}(K) = 1 - \frac{K}{F_0},
   \quad\Rightarrow\quad
   P_{coin}(K) = C_{coin}(K) - \left(1-\frac{K}{F_0}\right).
-  $
+  ```
+  
   The code floors puts at 0.
 
 ### Time to maturity
