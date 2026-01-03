@@ -18,6 +18,7 @@ The code is organized around a simple pipeline:
   - `calibration.py` — filtering/cleaning + fast batch pricing + weighted least-squares calibration
   - `collect_deribit_snapshot.py` — Deribit public-API snapshot collector (options + perp futures snapshot)
 - `docs/`
+  - `code_documentation.md` - the documentation for the main part of the code
   - `MASTERS_DIPLOM.pdf` — the thesis PDF (context + methodology)
 - `data/`
   - `deribit_options_snapshot_*.csv` — timestamped option cross-sections (bid/ask/mid/greeks/OI, etc.)
