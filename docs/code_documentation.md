@@ -1,377 +1,168 @@
 # Code documentation
 
-This document explains **what the main Python modules do** and how the key functions fit together.
+This document explains **what the main Python modules in this project do** and how their key functions fit together.  It is meant as a technical companion to the high‑level overview in the README, and it follows the same pricing conventions used throughout the thesis.  For mathematical derivations and theoretical background, see `docs/MASTERS_DIPLOM.pdf`.
 
 ---
 
 ## Conventions used throughout the code
 
 ### Underlying and strike
-- The option is written on a **futures/forward price** `F` quoted in **USD per coin** (e.g., USD/BTC).
-- Strikes `K` are also **USD per coin**.
 
-### Coin-denominated (inverse) option prices
-Deribit inverse options are quoted in **coin** (e.g., BTC). In this project:
+* Options are written on a **futures or forward price** `F` quoted in USD per coin (e.g., USD/BTC).
+* Strikes `K` are also expressed in USD per coin.
 
-- The FFT produces **regular call prices in USD** on a strike grid:  
-  `C_usd(K)`.
+### Coin‑denominated (inverse) option prices
 
-- The module converts to **inverse (coin) call prices** by:
-  ```math
-  C_{coin}(K) = \frac{C_{usd}(K)}{F_0}.
-  ```
+Inverse options are quoted and settled in coins rather than in dollars.  The pricing workflow therefore:
 
-- Inverse put prices are obtained using **inverse put–call parity**:
-  ```math
-  C_{coin}(K) - P_{coin}(K) = 1 - \frac{K}{F_0},
-  \quad\Rightarrow\quad
-  P_{coin}(K) = C_{coin}(K) - \left(1-\frac{K}{F_0}\right).
-  ```
-  
-  The code floors puts at 0.
+1. Computes a **regular call price grid in USD** on a strike grid `K_grid`.
+2. Converts to **coin call prices** via `C_coin(K) = C_usd(K) / F_0` where `F_0` is a proxy for the forward price at expiry.
+3. Obtains **coin puts** by **inverse put–call parity**:
+
+   $$P_{coin}(K) = C_{coin}(K) - \left(1 - \frac{K}{F_0}\right).$$
+
+Calls are clipped to `[0,1]` and puts are floored at zero to reflect the maximum one‑coin payoff.
 
 ### Time to maturity
-- `T` is measured in **years** (ACT/365 style implied by how snapshots are built).
-- Input datasets carry `time_to_maturity` in years.
+
+Time to maturity `T` is measured in years.  Snapshot CSVs carry a column `time_to_maturity` in years and this value is passed directly into the pricing functions.
 
 ---
 
 ## Module: `src/inverse_fft_pricer.py`
 
 ### What this module is responsible for
-- Computing a **strike grid** and the associated **USD call prices** via the **Carr–Madan FFT**.
-- Converting those prices to **coin-denominated inverse calls/puts**.
-- Providing “sanity-check” pricers for Black–76 and (semi-analytical) Heston.
 
-### Key data structure: `FFTParams`
+`inverse_fft_pricer.py` implements the **Carr–Madan FFT engine** for European options on a futures price and provides characteristic functions for the supported models.
 
-```python
-class FFTParams:
-    N: int = 2 ** 12
-    alpha: float = 1.5
-    eta: float = 0.1
-    b: float = -5.0
-    use_simpson: bool = True
-```
+* **Characteristic functions** – Functions `cf_black`, `cf_heston` and `cf_svcj` compute the log characteristic functions for the Black, Heston and SVCJ models, respectively.  Heston uses a stable complex square‑root branch, and SVCJ evaluates the jump term via Gauss–Legendre quadrature.
+* **FFT pricing** – The function `carr_madan_call_fft(cf, T, F0, params, fft_params)` builds a frequency grid `v_j = j * eta`, damps the integrand with the Carr–Madan exponential factor, applies quadrature weights (trapezoid or Simpson) and uses an FFT to transform to log‑strikes.  It returns `(K_grid, C_grid_usd)` in **USD**.
+* **High‑level pricing** – `price_inverse_option(model, K, T, F0, params, option_type='call', ...)` selects the appropriate characteristic function, calls the FFT engine to get a call price grid, interpolates to requested strikes, scales to coin units and converts puts via inverse parity.  It accepts scalar or vector strikes and can return the pricing grid for diagnostics.
 
-Interpretation:
-- `N`: number of FFT grid points (power of two recommended).
-- `alpha`: Carr–Madan exponential **damping** parameter for calls.
-- `eta`: frequency step; sets max frequency and (via the FFT) the log-strike spacing.
-- `b`: log-strike grid shift. In practice, **`calibration.py` often chooses this dynamically** so the grid
-  is centered around the strikes being fit.
-- `use_simpson`: if `True`, Simpson weights are used; otherwise trapezoid weights.
+### FFT parameters
 
-### Primary entry point: `price_inverse_option`
+The grid is controlled by a `FFTParams` dataclass with fields:
 
-```python
-def price_inverse_option(
-    model: str,
-    K: float | np.ndarray,
-    T: float,
-    F0: float,
-    params: dict,
-    *,
-    option_type: str = "call",
-    fft_params: FFTParams | None = None,
-    use_cache: bool = True,
-    return_grid: bool = False,
-) -> tuple[np.ndarray, np.ndarray] | np.ndarray:
-```
+* `N` – number of grid points (power of two for FFT efficiency).
+* `alpha` – exponential damping parameter (set so the call transform is integrable).
+* `eta` – frequency step; determines spacing of log‑strike grid.
+* `b` – shift of the log‑strike grid.  In practice, `calibration.py` or `snapshot_job.py` may compute `b` dynamically per expiry to centre the grid around the data.
+* `use_simpson` – if `True`, Simpson quadrature weights are used; otherwise trapezoid weights.
 
-What it does:
-1. Selects a characteristic function `cf_*` based on `model`.
-2. Calls the Carr–Madan FFT once to compute a **USD call price grid** `(K_grid, C_grid)`.
-3. Interpolates `C_usd(K)` onto the requested strike(s) `K`.
-4. Converts to **coin**: `C_coin = C_usd / F0`.
-5. If `option_type="put"`, applies inverse put–call parity.
-
-Important implementation notes:
-- `np.interp` is used (linear interpolation) on the monotone `K_grid`.
-- Call prices in coin are clipped to `[0, 1]` (consistent with the “max 1 coin” intuition for inverse payoffs).
-- Puts are floored at 0.
-- If `return_grid=True`, returns `(price_coin, K_grid, C_grid)` for debugging/plotting.
-
-Parameter dictionaries expected by `price_inverse_option`:
-- **Black**: `{"sigma": ...}`
-- **Heston**: `{"kappa": ..., "theta": ..., "sigma_v": ..., "rho": ..., "v0": ...}`
-- **SVCJ**: `{"kappa": ..., "theta": ..., "sigma_v": ..., "rho": ..., "v0": ..., "lam": ..., "ell_y": ..., "sigma_y": ..., "ell_v": ..., "rho_j": ...}`
-
-### FFT engine: `carr_madan_call_fft`
-
-```python
-def carr_madan_call_fft(
-    cf: callable,
-    T: float,
-    F0: float,
-    params: tuple,
-    fft_params: FFTParams,
-) -> tuple[np.ndarray, np.ndarray]:
-```
-
-What it returns:
-- `K_grid`: strikes (ascending)
-- `C_grid`: **regular call prices in USD** (not coin)
-
-Under the hood:
-- Builds a frequency grid `v_j = j * eta`.
-- Evaluates the CF at a shifted argument `v - i(α+1)` (call damping).
-- Applies quadrature weights (`Simpson` or trapezoid).
-- FFT transforms the damped integrand into a log-strike grid.
-- Maps log-strikes `k` to strikes `K = exp(k)`.
-
-### Characteristic functions
-
-- **Black**: `cf_black(u, T, F0, sigma)`
-  - log-futures is Gaussian with variance `sigma^2 T`.
-
-- **Heston**: `cf_heston(u, T, F0, kappa, theta, sigma_v, rho, v0)`
-  - Includes numerical guards for overflow/non-finite exponentials.
-  - Uses a stable complex square-root branch handling to reduce discontinuities.
-
-- **SVCJ**: `cf_svcj(u, T, F0, kappa, theta, sigma_v, rho, v0, lam, ell_y, sigma_y, ell_v, rho_j, quad_nodes=32)`
-  - Adds a jump component with Gauss–Legendre quadrature over time.
-  - Guards against numerical blow-ups similarly to Heston.
-
-### Caching (performance)
-The module uses `functools.lru_cache` for:
-- Gauss–Legendre nodes/weights (`_leggauss_cached`).
-- Quadrature weights for FFT grids (`_quadrature_weights_cached`).
-- Entire pricing grids `(K_grid, C_grid)` keyed by `(model, T, F0, params, FFTParams)` via `_cached_pricing_grid`.
-
-Calibration often sets `use_cache=False` because parameter vectors change at every residual evaluation, which yields
-low cache hit rates and can increase memory churn.
-
-### Reference pricers (sanity checks)
-- `black76_call_price`, `black76_put_price`: analytic Black–76 (undiscounted, consistent with futures conventions).
-- `heston_call_price`, `heston_put_price`: semi-analytical Heston via Gil–Pelaez inversion.
-  - The **put** implementation is computed **directly** (no put–call parity shortcut), so it’s useful as a correctness check.
+Reference pricers (`black76_call_price`, `black76_put_price`, `heston_call_price`, `heston_put_price`) are provided for sanity checks and validation.
 
 ---
 
 ## Module: `src/calibration.py`
 
 ### What this module is responsible for
-- Cleaning/filtering Deribit snapshot data into a “fit-ready” cross-section.
-- Computing per-option weights and fit targets.
-- Pricing a dataset efficiently by reusing **one FFT per expiry bucket**.
-- Running **weighted nonlinear least squares** calibration for `black`, `heston`, and `svcj`.
 
-### Expected input schema (minimum required columns)
+`calibration.py` implements the **data → calibration** pipeline for a single snapshot.  It wraps the FFT pricer with data filtering, weighting and parameter estimation logic.
 
-`filter_liquid_options` expects at least:
+* **Filtering and cleaning** – The function `filter_liquid_options(df, ...)` validates required columns (`bid_price`, `ask_price`, `strike`, `expiry_datetime`, `time_to_maturity`, `futures_price`, `vega`, `open_interest`), computes mid prices and spreads, derives a forward proxy `F0` per expiry, computes moneyness `K/F0` and log‑moneyness, and applies screens on time to maturity, relative spread, moneyness band, open interest and vega.  Synthetic instruments can be dropped via `drop_synthetic_underlyings`.
+* **Pricing a dataset** – `price_dataframe(df, model, params, fft_params_base, dynamic_b, ...)` builds a per‑expiry pricing plan and runs the FFT once per expiry to price all calls.  Puts are computed via inverse parity.  A dynamic `b` option centres the log‑strike grid around the median strike of each expiry bucket to improve interpolation.
+* **Weighting** – A `WeightConfig` class defines how residuals are weighted in the calibration objective.  Spread, vega and open interest can contribute to the weight, with configurable exponents and caps.  Weights down‑weight illiquid or wide‑spread options.
+* **Calibration** – `calibrate_model(df, model, ..., initial_params, bounds, penalty_coin, constraint_penalty, feller_eps, svcj_moment_eps, max_nfev, verbose, ...)` solves a **weighted nonlinear least‑squares** problem for the specified model.  The parameter vector is transformed (log for positive parameters, arctanh for correlations) and additional residuals impose soft penalties for the Heston Feller condition (`sigma_v^2 ≤ 2 κ θ`) and SVCJ moment stability (`1 - ell_v * rho_j ≥ ε`).  `scipy.optimize.least_squares` is used under the hood and returns a `CalibrationResult` with parameter estimates, fit metrics and success flags.
+* **Cache management** – `clear_fft_cache()` clears the internal LRU cache used by the pricer to store previously computed FFT grids.  This can reduce memory usage when calibrating many snapshots sequentially.
 
-```text
-currency, option_type, strike, time_to_maturity,
-bid_price, ask_price, futures_price, vega, open_interest, expiry_datetime
-```
+`calibration.py` does not perform any I/O; it expects a DataFrame and model configuration and returns calibrated parameters and prices.  Higher‑level modules orchestrate persistence and parallelism.
 
-Additional columns (if present) may be used for initial guesses or extra filtering (e.g., `implied_volatility`).
+---
 
-### Weighting
+## Module: `src/results_store.py`
 
-`WeightConfig` controls per-row weights $w_i$ used in the residual:
-```math
-r_i = w_i \cdot (P^{model}_{coin,i} - P^{mkt}_{coin,i})
-```
+### What this module is responsible for
 
-Key behavior:
-- `use_spread=True` downweights wide markets via $(spread+\varepsilon)^{-p}$.
-- `use_vega=True` and `use_open_interest=True` scale weights by powers of `vega` and `open_interest`.
-- `cap` limits extreme weights.
+`results_store.py` manages persistence of calibration results in an **Excel workbook**.  It defines the workbook schema and provides helpers for initialisation, loading, appending and flushing.
 
-### Filtering: `filter_liquid_options`
+* **Workbook structure** – The workbook contains five sheets: `black_params`, `heston_params`, `svcj_params`, `train_data` and `test_data`.  The parameter sheets hold one row per processed snapshot per currency (timestamp, currency, fitted parameters, success flag, message, number of function evaluations and error metrics).  The data sheets hold the rows used in the train and test sets along with the computed model prices.
+* **Initialisation** – `init_empty_workbook()` returns a dictionary of empty DataFrames with the correct columns for each sheet.  New workbooks use this structure when none exists.
+* **Loading** – `load_existing_workbook(path)` reads an existing workbook into DataFrames and adds any missing columns to accommodate schema evolution.  It returns an in‑memory dictionary of DataFrames.
+* **Resuming** – `get_latest_processed_timestamp(workbook, currency)` reads the parameter sheets to determine the most recent timestamp for a given currency.  Batch runners use this to skip already processed snapshots.
+* **Appending and flushing** – `append_df(workbook, sheet_name, df)` appends new rows to the given sheet in the in‑memory workbook.  `flush_workbook_atomic(workbook, output_path)` writes the workbook to a temporary file and replaces the existing file atomically.  Periodic flushing ensures that partial results are never left on disk and that the pipeline can resume safely.
 
-```python
-def filter_liquid_options(
-    df: pd.DataFrame,
-    *,
-    currency: Optional[str] = None,
-    require_bid_ask: bool = True,
-    min_time_to_maturity: float = 1.0 / 365.0,
-    max_time_to_maturity: Optional[float] = None,
-    min_open_interest: float = 1.0,
-    min_vega: float = 0.0,
-    max_rel_spread: Optional[float] = 0.5,
-    moneyness_range: Optional[Tuple[float, float]] = (0.5, 2.0),
-    drop_synthetic_underlyings: bool = False,
-) -> pd.DataFrame:
-```
+`results_store.py` is used only by the batch runner; it is not imported into the pricing or calibration modules.
 
-What it does (high level):
-- Validates required columns exist.
-- Optional currency subset.
-- Drops rows with missing bid/ask (if enabled), invalid/missing `T`, `K`, `F0` proxies, etc.
-- Computes:
-  - `mid_price_clean = 0.5*(bid+ask)`
-  - `spread = ask-bid`
-  - `rel_spread = spread / mid`
-  - `F0` as **per-expiry median** of `futures_price`
-  - `moneyness = K/F0` and `log_moneyness`
-- Applies screens: `T` bounds, min `open_interest`, min `vega`, relative spread cap, moneyness band.
-- Optionally removes “synthetic” underlyings (prefix `SYN.`).
+---
 
-The output DataFrame is “calibration-ready”: it contains the columns used by the pricing plan and weighting.
+## Module: `src/snapshot_job.py`
 
-### Fast dataset pricing: `price_dataframe`
+### What this module is responsible for
 
-```python
-def price_dataframe(
-    df: pd.DataFrame,
-    model: str,
-    params: Dict[str, float],
-    *,
-    fft_params_base: Optional[FFTParams] = None,
-    dynamic_b: bool = True,
-    fft_params_by_expiry: Optional[dict] = None,
-    use_cache: bool = True,
-) -> np.ndarray:
-```
+`snapshot_job.py` orchestrates all tasks needed to process **one snapshot CSV** and prepare results for persistence.  It is the glue between the calibration pipeline and the batch runner.
 
-Purpose:
-- Prices every row in `df` **in coin units**, efficiently, by:
-  1. Building a per-expiry “pricing plan”
-  2. Running one FFT per expiry to price calls
-  3. Computing puts by inverse parity (within the expiry bucket)
+* **Timestamp parsing** – Helpers `timestamp_from_filename` and `timestamp_to_iso_z` extract consistent ISO timestamps from snapshot file names and convert them to strings for workbook keys.
+* **Data loading and filtering** – Reads the CSV into a DataFrame and calls `calibration.filter_liquid_options` with the filtering rules supplied by the batch configuration.
+* **Runtime throttling** – An optional `restrict_for_runtime(df, top_expiries_by_oi, max_options)` can limit the number of expiries or options for smoke tests or time‑limited runs.
+* **Train/test split** – `train_test_split_df(df, train_frac, seed)` shuffles the rows deterministically using a seeded random generator and splits the filtered dataset into a train and test set.
+* **Calibration with warm starts** – Calls `calibration.calibrate_model` sequentially for the Black, Heston and SVCJ models.  Each model can be initialised from either the previous snapshot’s parameters or a simple function of the Black volatility (for Heston/SVCJ).  Maximum function evaluations are configurable per model.
+* **Repricing full dataset** – After calibrating, `price_dataframe` is called once per model on the full filtered DataFrame to obtain consistent model prices for both train and test rows.
+* **Error metrics and payload** – Computes unweighted RMSE and MAE for the train and test sets.  Returns a payload containing the parameter rows, the priced train and test DataFrames, and the warm‑start parameters for the next snapshot.
 
-This is the same mechanism used inside calibration residuals.
+The batch runner uses this payload to append rows to the workbook and to initialise warm starts for subsequent snapshots.
 
-### Per-expiry pricing plan (internal helpers)
-These functions are internal but are central to performance:
+---
 
-- `_choose_fft_params_for_group(base, strikes)`
-  - Computes a `b` that centers the FFT strike grid around the median strike of the group:
-    ```math
-    b \approx \log(\mathrm{median}(K)) - \tfrac{1}{2}N\lambda
-    ```
-  - This is used when `dynamic_b=True`.
+## Module: `src/batch_runner.py`
 
-- `_build_pricing_plan(df, ...)`
-  - Groups rows by `expiry_datetime` into buckets.
-  - Stores `(row_indices, strikes, put_mask, T_bucket, F0_bucket, FFTParams_bucket)`.
+### What this module is responsible for
 
-- `_price_with_plan(groups, model, params, out_prices, use_cache)`
-  - For each expiry bucket:
-    - calls `price_inverse_option(..., option_type="call")` once on all strikes
-    - fills call rows directly
-    - fills put rows via `P_coin = C_coin - (1 - K/F0)` floored at 0
+`batch_runner.py` runs calibration across **multiple snapshots and currencies**.  It coordinates file enumeration, warm starts, multithreading and persistence.
 
-### Cache management
+* **Batch configuration** – Defines a `BatchConfig` dataclass that holds global configuration: project root, output workbook path, filtering rules, weighting parameters, FFT parameters, train fraction, maximum function evaluations per model, runtime throttles, number of workers, verbosity, etc.  This configuration is consumed by the runner and by `snapshot_job`.
+* **Snapshot enumeration and resume** – `list_snapshot_files()` and related helpers locate snapshot CSV files in the `data/` directory and sort them by timestamp.  The function `get_latest_processed_timestamp` from `results_store` is used to skip snapshots that have already been processed when resuming.
+* **Chunking and multithreading** – The list of pending snapshot files is divided into contiguous chunks and assigned to worker threads.  Each worker calls `process_snapshot_to_payload` sequentially on its chunk, using a warm‑start dictionary initialised from the last processed snapshot for that currency.
+* **Ordered committing** – Worker threads place their results into a queue.  The main thread pops payloads and commits them to the workbook **in timestamp order**, ensuring that partial results always form a contiguous prefix of the chronology.  Skipped or failed snapshots still write a parameter row with `success=False` so they will not be retried.
+* **Periodic flushing and progress reporting** – After a configurable number of committed snapshots the workbook is flushed atomically to disk.  The verbosity level controls whether the runner prints per‑snapshot status messages and calibration diagnostics.
 
-```python
-def clear_fft_cache() -> None:
-```
-
-Clears the global LRU cache in the pricer (the cached FFT grids). Helpful when:
-- calibrating many independent snapshots sequentially,
-- changing FFT grid settings frequently,
-- or when memory use grows due to low cache hit rates.
-
-### Calibration: `calibrate_model`
-
-```python
-def calibrate_model(
-    df: pd.DataFrame,
-    model: str,
-    *,
-    weight_config: WeightConfig = WeightConfig(),
-    fft_params_base: Optional[FFTParams] = None,
-    dynamic_b: bool = True,
-    fft_params_by_expiry: Optional[dict] = None,
-    use_cache_in_optimization: bool = False,
-    initial_params: Optional[Dict[str, float]] = None,
-    bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-    penalty_coin: float = 10.0,
-    constraint_penalty: float = 100.0,
-    feller_eps: float = 0.0,
-    svcj_moment_eps: float = 1e-6,
-    max_nfev: int = 50,
-    verbose: int = 1,
-    clear_cache_before: bool = False,
-) -> CalibrationResult:
-```
-
-What it does:
-1. Computes weights `w_i` from the cleaned DataFrame (spread/vega/OI, configurable).
-2. Builds the per-expiry pricing plan once (so residuals are fast).
-3. Sets up a SciPy `least_squares` problem over a **transformed parameter vector** `x`:
-   - positive parameters use `log` transforms,
-   - correlations use `tanh` (packed with `arctanh`).
-
-4. On every residual evaluation:
-   - unpack `x → params`
-   - price the dataset with the per-expiry plan
-   - compute residuals `r_i = w_i * (P_model_coin - P_mkt_coin)`
-   - replace any non-finite model prices with a large penalty residual.
-
-5. Adds constraint penalties (as extra residual components):
-   - For Heston and SVCJ: a soft **Feller-type** penalty:
-     ```math
-     \sigma_v^2 \le 2\kappa\theta - \varepsilon
-     ```
-   - For SVCJ: a soft “moment stability” penalty:
-     ```math
-     1 - \ell_v \rho_j \ge \varepsilon
-     ```
-   These are implemented as nonnegative violations multiplied by `constraint_penalty`.
-
-6. Returns `CalibrationResult(model, params_hat, success, message, nfev, rmse, mae)` computed on coin prices.
-
-Parameterization / transforms used internally:
-- Black: `x = [log(sigma)]`
-- Heston: `x = [log(kappa), log(theta), log(sigma_v), arctanh(rho), log(v0)]`
-- SVCJ adds `[log(lam), ell_y, log(sigma_y), log(ell_v), arctanh(rho_j)]`
-
-Default initial guesses are inferred from the snapshot’s median implied vol (if available) and are otherwise
-set to reasonable constants.
+High‑level functions `run_currency_to_excel(cfg, currency)` and `run_all_snapshots_to_excel(cfg)` hide these details and can be called from notebooks or scripts.
 
 ---
 
 ## Module: `src/collect_deribit_snapshot.py`
 
 ### What this module is responsible for
-- Collecting a consistent “snapshot” of Deribit markets via the public HTTP API:
-  - option instruments
-  - option book summaries (bid/ask, open interest, etc.)
-  - per-instrument ticker (greeks)
-  - perpetual futures ticker
 
-The key functions are thin endpoint wrappers:
-- `get_instruments(...)`
-- `get_book_summary_options(...)`
-- `get_ticker(instrument_name)`
-- `get_perp_ticker(currency)`
-- `main(...)` orchestrates the fetch and writes CSVs.
+`collect_deribit_snapshot.py` fetches a market snapshot from the **Deribit public API** and writes two CSV files:
 
-The output CSVs are designed to match the schema expected by `filter_liquid_options`.
+* `deribit_options_snapshot_<timestamp>.csv` – Contains one row per option instrument with metadata (expiry, strike, option type), bid/ask prices, mark price, implied volatility, greeks, open interest and other fields.
+* `perpetual_futures_prices.csv` – Contains the best bid, best ask and mark price for the perpetual futures contract at the same timestamp.
+
+The snapshot is built by calling Deribit API endpoints to list instruments, fetch book summaries, fetch per‑instrument tickers and fetch the perp ticker.  The output CSVs are ready for ingestion by `calibration.filter_liquid_options` and the batch pipeline.
 
 ---
 
-## Extending the code (common research tasks)
+## Extending the code
 
-### Adding a new model (high level)
-1. Implement a new characteristic function `cf_newmodel(u, T, F0, ...)`.
-2. Add a new branch in `price_inverse_option` selecting the CF and packing parameters.
-3. Optionally add:
-   - analytic/semi-analytic check pricer (for validation)
-   - new default bounds / initial params / packing transforms in `calibration.py`
-4. Ensure the model returns stable values for `u - i(α+1)` given your choice of `alpha`
-   (moment existence is the usual failure point for jump models).
+### Adding a new model
+
+1. Implement a characteristic function `cf_newmodel(u, T, F0, ...)` in `inverse_fft_pricer.py` and ensure it remains stable for complex arguments `u - i(α+1)`.
+2. Modify `price_inverse_option` to select your new characteristic function and define how to unpack parameters from a dictionary.
+3. Provide initial guesses, bounds and parameter transformations in `calibration.calibrate_model`.
+4. Add new parameter columns to the workbook schema in `results_store.py` and update the payload assembly in `snapshot_job.py`.
+5. Update this documentation and the README to describe your new model and any additional notebooks.
 
 ### Changing filtering or weights
-- Filtering lives in `filter_liquid_options`.
-- Weighting lives in `_weights` and is configured by `WeightConfig`.
-- If you change either, it will impact calibration results directly; keep notes consistent with the PDF spec.
 
-### Performance knobs to be aware of
-- `FFTParams.N` and `eta` (speed vs resolution).
-- `dynamic_b` (reduces interpolation error; usually helps stability).
-- `use_cache_in_optimization` (often **off** during least-squares).
-- SVCJ `quad_nodes` inside `cf_svcj` (accuracy vs speed).
+Filtering rules are implemented in `calibration.filter_liquid_options`.  They can be configured via the `BatchConfig.filter_rules` dictionary in `batch_runner.py`.  Weighting is controlled by `WeightConfig`, which allows down‑weighting by spread, vega and open interest with configurable exponents.  Changing these values will affect the objective function in calibration, so document your choices when publishing results.
+
+### Performance considerations
+
+* **FFT resolution** – `FFTParams.N` and `eta` determine the resolution and range of the strike grid.  Larger `N` increases accuracy but increases computation time approximately as `O(N log N)`.
+* **Dynamic centering** – Setting `dynamic_b=True` in pricing functions centres the log‑strike grid around the median strike of each expiry bucket, improving interpolation quality and reducing the required grid size.
+* **Parallelism** – The number of worker threads `n_workers` should be chosen to match your hardware.  Each worker processes a contiguous chunk of snapshots and should not oversubscribe CPU cores, especially when BLAS libraries spawn internal threads.  Limiting internal threads via environment variables (e.g. `OMP_NUM_THREADS=1`) can improve overall throughput.
+* **Flush frequency** – The `save_every_n_files` parameter controls how often the workbook is flushed to disk.  Smaller values reduce the amount of work lost on interruption but increase I/O overhead.
 
 ---
 
-## Cross-reference: notebooks → modules
-- `pricing_examples.ipynb` → `inverse_fft_pricer.price_inverse_option` (+ reference pricers)
-- `calibration_example.ipynb` → `calibration.filter_liquid_options`, `calibration.calibrate_model`
-- `calibrate_all.ipynb` → repeated calls to `calibrate_model` across snapshots (optionally clearing caches)
+## Cross‑reference: notebooks → modules
+
+* `pricing_examples.ipynb` → `inverse_fft_pricer.price_inverse_option` and the reference pricers.
+* `calibration_example.ipynb` → `calibration.filter_liquid_options`, `calibration.calibrate_model`, `calibration.price_dataframe`.
+* `calibrate_all_to_excel.ipynb` → `batch_runner.run_all_snapshots_to_excel`, `snapshot_job.process_snapshot_to_payload`, and `results_store.flush_workbook_atomic`.
+
+---
+
+## Conclusion
+
+The project is structured to separate pricing, data handling, calibration, persistence and orchestration.  Understanding the responsibilities of each module should make it straightforward to extend the pipeline to new models, new markets or new output formats while maintaining reproducibility and stability.
