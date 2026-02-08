@@ -63,3 +63,7 @@ When run over multiple snapshots and currencies, the pipeline supports **warm st
 * **`pricing_examples.ipynb`** – Demonstrates inverse call/put pricing for the Black, Heston and SVCJ models across a range of strikes and maturities.
 * **`calibration_example.ipynb`** – Walks through a single snapshot: loading data, filtering and cleaning, calibrating each model, pricing train/test sets and plotting diagnostics.
 * **`calibrate_all_to_excel.ipynb`** – Provides a thin front‑end for the batch pipeline.  It defines a `BatchConfig` with FFT parameters, filtering rules, weighting and worker settings, calls `run_all_snapshots_to_excel` from `src`, and displays progress and results.
+
+---
+
+Excel workbook with calibration results available [here](https://data.tinkoff.ru/s/dcXFmots36jNxGK).
