@@ -144,25 +144,11 @@ The snapshot is built by calling Deribit API endpoints to list instruments, fetc
 
 ### Changing filtering or weights
 
-Filtering rules are implemented in `calibration.filter_liquid_options`.  They can be configured via the `BatchConfig.filter_rules` dictionary in `batch_runner.py`.  Weighting is controlled by `WeightConfig`, which allows down‑weighting by spread, vega and open interest with configurable exponents.  Changing these values will affect the objective function in calibration, so document your choices when publishing results.
+Filtering rules are implemented in `calibration.filter_liquid_options`.  They can be configured via the `BatchConfig.filter_rules` dictionary in `batch_runner.py`.  Weighting is controlled by `WeightConfig`, which allows weighting by spread, vega and open interest with configurable exponents.
 
 ### Performance considerations
 
 * **FFT resolution** – `FFTParams.N` and `eta` determine the resolution and range of the strike grid.  Larger `N` increases accuracy but increases computation time approximately as `O(N log N)`.
 * **Dynamic centering** – Setting `dynamic_b=True` in pricing functions centres the log‑strike grid around the median strike of each expiry bucket, improving interpolation quality and reducing the required grid size.
-* **Parallelism** – The number of worker threads `n_workers` should be chosen to match your hardware.  Each worker processes a contiguous chunk of snapshots and should not oversubscribe CPU cores, especially when BLAS libraries spawn internal threads.  Limiting internal threads via environment variables (e.g. `OMP_NUM_THREADS=1`) can improve overall throughput.
+* **Parallelism** – The number of worker threads `n_workers` should be chosen to match your hardware.  Each worker processes a contiguous chunk of snapshots and should not oversubscribe CPU cores, especially when BLAS libraries spawn internal threads.  Limiting internal threads via environment variables (e.g. `OMP_NUM_THREADS=1`) can improve overall speed.
 * **Flush frequency** – The `save_every_n_files` parameter controls how often the workbook is flushed to disk.  Smaller values reduce the amount of work lost on interruption but increase I/O overhead.
-
----
-
-## Cross‑reference: notebooks → modules
-
-* `pricing_examples.ipynb` → `inverse_fft_pricer.price_inverse_option` and the reference pricers.
-* `calibration_example.ipynb` → `calibration.filter_liquid_options`, `calibration.calibrate_model`, `calibration.price_dataframe`.
-* `calibrate_all_to_excel.ipynb` → `batch_runner.run_all_snapshots_to_excel`, `snapshot_job.process_snapshot_to_payload`, and `results_store.flush_workbook_atomic`.
-
----
-
-## Conclusion
-
-The project is structured to separate pricing, data handling, calibration, persistence and orchestration.  Understanding the responsibilities of each module should make it straightforward to extend the pipeline to new models, new markets or new output formats while maintaining reproducibility and stability.
