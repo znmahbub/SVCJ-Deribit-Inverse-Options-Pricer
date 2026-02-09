@@ -66,4 +66,4 @@ When run over multiple snapshots and currencies, the pipeline supports **warm st
 
 ---
 
-Excel workbook with calibration results available [here](https://data.tinkoff.ru/s/dcXFmots36jNxGK).
+Excel workbook with calibration results available [here](https://docs.google.com/spreadsheets/d/1J3GOZbjWJaWyxio0bJqOYESM-xSUDmRC/edit?usp=sharing&ouid=118021293915860982779&rtpof=true&sd=true).
