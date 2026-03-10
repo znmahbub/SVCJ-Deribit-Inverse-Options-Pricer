@@ -316,7 +316,12 @@ def process_snapshot_to_payload(
             "warm_next": warm_next,
         }
 
-    df_ccy = df_raw[df_raw["currency"].astype(str) == str(currency)].copy()
+    # Be tolerant to casing / stray whitespace in source CSVs.
+    # `filter_liquid_options(..., currency=...)` is already case-insensitive, but
+    # this pre-filter runs first and previously could drop all rows unexpectedly.
+    df_ccy = df_raw[
+        df_raw["currency"].astype(str).str.strip().str.upper() == str(currency).strip().upper()
+    ].copy()
 
     if df_ccy.empty:
         msg = f"No rows found for currency={currency} in this snapshot."
@@ -557,7 +562,13 @@ def process_snapshot_to_payload(
 
     # Deterministic split (shuffled)
     df_filt = df_filt.sample(frac=1.0, random_state=random_seed).reset_index(drop=True)
-    n_train = int(np.floor(train_frac * len(df_filt)))
+    n_total_rows = int(len(df_filt))
+    n_train = int(np.floor(train_frac * n_total_rows))
+    # Keep calibration numerically meaningful even if train_frac is extreme.
+    if n_total_rows > 1:
+        n_train = min(max(n_train, 1), n_total_rows - 1)
+    else:
+        n_train = n_total_rows
     train = df_filt.iloc[:n_train].copy()
     test = df_filt.iloc[n_train:].copy()
 
