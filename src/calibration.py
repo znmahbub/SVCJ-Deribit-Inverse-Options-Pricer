@@ -493,6 +493,8 @@ def calibrate_model(
     fft_params_by_expiry: Optional[dict] = None,
     use_cache_in_optimization: bool = False,
     initial_params: Optional[Dict[str, float]] = None,
+    previous_params: Optional[Dict[str, float]] = None,
+    l2_prev_strength: float = 0.0,
     bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
     penalty_coin: float = 10.0,
     constraint_penalty: float = 100.0,
@@ -578,6 +580,14 @@ def calibrate_model(
     ub = np.asarray(ub, dtype=float)
     x0 = np.minimum(np.maximum(x0, lb), ub)
 
+    prev_x: Optional[np.ndarray] = None
+    l2_prev = float(l2_prev_strength)
+    if l2_prev > 0.0 and previous_params:
+        try:
+            prev_x = np.minimum(np.maximum(pack(previous_params), lb), ub)
+        except Exception:
+            prev_x = None
+
     def _constraint_residuals(p: Dict[str, float]) -> np.ndarray:
         pen = []
 
@@ -622,6 +632,20 @@ def calibrate_model(
         if np.any(bad):
             r_buf[bad] = penalty_coin * w[bad]
 
+        r = np.where(np.isfinite(r_buf), r_buf, penalty_coin)
+
+        l2_pen = np.empty(0, dtype=float)
+        if prev_x is not None and l2_prev > 0.0:
+            delta = x - prev_x
+            l2_pen = np.sqrt(l2_prev) * np.where(np.isfinite(delta), delta, 0.0)
+
+        if pen.size and l2_pen.size:
+            return np.concatenate([r, pen, l2_pen])
+        if pen.size:
+            return np.concatenate([r, pen])
+        if l2_pen.size:
+            return np.concatenate([r, l2_pen])
+        return r
         r_data = np.where(np.isfinite(r_buf), r_buf, penalty_coin)
         pieces = [r_data]
         if pen.size:

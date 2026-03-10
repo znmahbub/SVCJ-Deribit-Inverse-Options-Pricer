@@ -113,6 +113,7 @@ def process_snapshot_to_payload(
     runtime_max_options: Optional[int],
     min_options_after_filter: int,
     warm_start: Optional[dict[str, dict[str, float]]] = None,
+    l2_prev_strength: float = 0.0,
     verbose: bool = False,
 ) -> Dict[str, Any]:
     """Process one snapshot CSV and return an Excel-ready payload.
@@ -636,6 +637,8 @@ def process_snapshot_to_payload(
                 fft_params_by_expiry=fft_params_by_expiry,
                 use_cache_in_optimization=False,
                 initial_params=init_params,
+                l2_prev_strength=float(l2_prev_strength),
+                previous_params=warm_start.get(model),
                 max_nfev=int(max_nfev[model]),
                 verbose=0,
                 clear_cache_before=False,
