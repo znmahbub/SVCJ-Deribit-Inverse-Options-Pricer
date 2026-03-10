@@ -638,6 +638,7 @@ def process_snapshot_to_payload(
                 use_cache_in_optimization=False,
                 initial_params=init_params,
                 l2_prev_strength=float(l2_prev_strength),
+                previous_params=warm_start.get(model, None),
                 previous_params=warm_start.get(model),
                 max_nfev=int(max_nfev[model]),
                 verbose=0,
