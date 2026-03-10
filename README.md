@@ -1,69 +1,102 @@
-# Deribit Inverse Options — FFT Pricing & Calibration
+# Deribit Inverse Options Pricer (Black, Heston, SVCJ)
 
-This repository contains the core code used to price and calibrate **Deribit inverse options** (coin‑denominated calls and puts) under three models: **Black (Black–76)**, **Heston** and **SVCJ**.  These options are written on futures prices and settle in coins (BTC or ETH), which requires careful handling of the payoff and pricing convention.  The project implements a complete pipeline to ingest market snapshots, clean and filter the data, price options via a fast Fourier transform (FFT) engine, calibrate model parameters using a weighted least‑squares objective, and save results for multiple snapshots into a single workbook.
+This repository contains a full pricing and calibration workflow for **Deribit inverse options** (coin-settled options on crypto futures) under three models:
 
----
+- **Black (Black-76)**
+- **Heston**
+- **SVCJ**
 
-## Pipeline overview
+The core implementation combines a Carr-Madan FFT engine, data filtering for liquid quotes, weighted least-squares calibration, and Excel-based result persistence for multi-snapshot batch runs.
 
-For each Deribit snapshot (CSV) the pipeline performs the following steps:
+## What the pipeline does
 
-1. **Ingest snapshot data** – Load a CSV containing bid/ask quotes, greeks, open interest, strikes and expiry times for all listed options, together with a snapshot of the perpetual futures price.
-2. **Filter and clean** – Validate required fields, compute mid prices and relative spreads, derive a forward proxy `F₀` from the median futures price, and filter by time to maturity, moneyness band, open interest and vega.
-3. **Construct FFT strike grids** – For each expiry, build a log‑strike grid and run a single **Carr–Madan FFT** to obtain a call price grid in USD.  Interpolate to the requested strikes, convert to coin units and obtain puts via inverse put–call parity.
-4. **Split into training and test sets** – Shuffle the cleaned dataset deterministically and split it according to a configurable fraction.
-5. **Calibrate model parameters** – Solve a weighted nonlinear least‑squares problem on the training set for each model. The residual vector stacks market-fit terms and optional penalties: \(r_i(\theta)=w_i(P^{model}_i(\theta)-P^{mkt}_i)\), soft-constraint terms (Feller/moment), and an optional warm-start anchor term \(\sqrt{\lambda}\,(x-x_{prev})\) in transformed-parameter space when `l2_prev_strength=\lambda>0` and previous parameters are available. Parameters are transformed to enforce positivity and correlation bounds.
-6. **Re‑price the entire snapshot** – Price both the training and test rows once per model using the calibrated parameters to compute consistent model prices for error metrics.
-7. **Compute fit metrics and persist** – Compute RMSE and MAE on the train and test sets.  Append a row of parameters for each model and the priced option data to an Excel workbook, and periodically flush the workbook to disk.
+For each `deribit_options_snapshot_*.csv` file, the code:
 
-When run over multiple snapshots and currencies, the pipeline supports **warm starts** (initialising parameters for each snapshot from the previous fit) and **resumes** from the last processed timestamp.
-
----
+1. Loads and validates option snapshot data.
+2. Filters to liquid quotes (`bid/ask`, spread, maturity, OI, vega, moneyness).
+3. Builds per-expiry FFT pricing plans (one call-grid per expiry bucket).
+4. Splits filtered data into deterministic train/test subsets.
+5. Calibrates Black, Heston, and SVCJ on the train split (optionally warm-started).
+6. Reprices the full filtered dataset with calibrated parameters.
+7. Computes train/test metrics and appends everything to an Excel workbook.
 
 ## Repository layout
 
-```
+```text
 .
 ├── src/
-│   ├── inverse_fft_pricer.py       # Carr–Madan FFT pricer and characteristic functions
-│   ├── calibration.py              # Filtering, weighting and single‑snapshot calibration
-│   ├── collect_deribit_snapshot.py # Deribit API collector for options and perp snapshots
-│   ├── results_store.py            # Excel workbook schema and persistence helpers
-│   ├── snapshot_job.py             # Process one snapshot: filter → split → calibrate → price
-│   ├── batch_runner.py             # Run calibration across snapshots with multithreading
+│   ├── inverse_fft_pricer.py       # Characteristic functions + Carr-Madan FFT pricer
+│   ├── calibration.py              # Filtering, weighting, vectorized pricing, calibration
+│   ├── snapshot_job.py             # Process one snapshot into an Excel-ready payload
+│   ├── batch_runner.py             # Multi-snapshot / multi-currency batch orchestration
+│   ├── results_store.py            # Workbook schema, append helpers, atomic flush
+│   ├── collect_deribit_snapshot.py # Deribit API snapshot collector
 │   └── __init__.py
-├── data/
-│   ├── deribit_options_snapshot_*.csv  # Option snapshots
-│   └── perpetual_futures_prices.csv    # Perp snapshot
 ├── docs/
-│   ├── code_documentation.md       # Detailed documentation of modules and functions
-│   └── MASTERS_DIPLOM.pdf          # Thesis PDF (theory and derivations)
-├── pricing_examples.ipynb          # Demo: price inverse calls/puts across strikes
-├── calibration_example.ipynb       # Demo: filter, calibrate, price a single snapshot
-├── calibrate_all_to_excel.ipynb    # Configures and runs batch calibration, writing results to Excel
-├── requirements.txt                # Python dependencies
+│   ├── code_documentation.md       # Detailed module/function documentation
+│   └── MASTERS_DIPLOM.pdf          # Theory and derivations
+├── pricing_examples.ipynb
+├── calibration_example.ipynb
+├── calibrate_all_to_excel.ipynb
+├── requirements.txt
 └── README.md
 ```
 
----
+## Installation
 
-## Module summaries
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-* **`src/inverse_fft_pricer.py`** – Implements the Carr–Madan FFT engine for European options on futures and provides characteristic functions for the Black, Heston and SVCJ models.  It exposes `price_inverse_option` to compute coin‑denominated calls and puts from model parameters.
-* **`src/calibration.py`** – Contains the data‑to‑calibration pipeline for a single snapshot.  Includes functions to clean and filter option data, build per‑expiry pricing plans, compute weights, price large datasets efficiently, and solve the weighted least‑squares calibration problem with soft constraints.
-* **`src/collect_deribit_snapshot.py`** – A script to collect a consistent snapshot from the Deribit public API, writing CSVs for options and perpetual futures.  The resulting files match the expected input schema of the calibration functions.
-* **`src/results_store.py`** – Defines the Excel workbook schema (parameter sheets and train/test data sheets) and provides helpers to initialise, load, append to and atomically flush the workbook.  Results are appended in chronological order to enable safe resume.
-* **`src/snapshot_job.py`** – Orchestrates the end‑to‑end processing of a single snapshot: loading the CSV, filtering, optional runtime throttles, splitting into train/test sets, calibrating each model sequentially (with warm starts), pricing the full dataset and assembling the payload for persistence.
-* **`src/batch_runner.py`** – Runs calibration across multiple snapshots and currencies.  It enumerates snapshot files, resumes from the last processed timestamp, splits the workload across worker threads, warms up each worker with parameters from previous snapshots, commits results to the workbook in order, and flushes periodically to disk.
+## Data collection
 
----
+Collect fresh Deribit snapshots (options + perpetual futures):
 
-## Notebook summaries
+```bash
+python -m src.collect_deribit_snapshot --currency BOTH --outdir data
+```
 
-* **`pricing_examples.ipynb`** – Demonstrates inverse call/put pricing for the Black, Heston and SVCJ models across a range of strikes and maturities.
-* **`calibration_example.ipynb`** – Walks through a single snapshot: loading data, filtering and cleaning, calibrating each model, pricing train/test sets and plotting diagnostics.
-* **`calibrate_all_to_excel.ipynb`** – Provides a thin front‑end for the batch pipeline.  It defines a `BatchConfig` with FFT parameters, filtering rules, weighting and worker settings, calls `run_all_snapshots_to_excel` from `src`, and displays progress and results.
+Useful flags:
 
----
+- `--currency BTC|ETH|BOTH`
+- `--max-instruments <n>` for quick test snapshots
+- `--sleep <seconds>` between ticker requests
 
-Excel workbook with calibration results available [here](https://docs.google.com/spreadsheets/d/1J3GOZbjWJaWyxio0bJqOYESM-xSUDmRC/edit?usp=sharing&ouid=118021293915860982779&rtpof=true&sd=true).
+## Running calibrations
+
+### Single snapshot (programmatic)
+
+Use `process_snapshot_to_payload(...)` from `src.snapshot_job` when you want one-file processing and full control over config objects.
+
+### Batch run to Excel (programmatic)
+
+Use `BatchConfig` + `run_all_snapshots_to_excel(...)` from `src.batch_runner`.
+The typical pattern is demonstrated in `calibrate_all_to_excel.ipynb`.
+
+## Output workbook schema
+
+`calibration_results.xlsx` contains five sheets:
+
+- `black_params`
+- `heston_params`
+- `svcj_params`
+- `train_data`
+- `test_data`
+
+The batch runner is resume-safe: it checks the latest processed timestamp per currency and continues from there when `resume=True`.
+
+## Pricing conventions
+
+- Inputs are futures/forward prices `F0` and strikes `K` in USD per coin.
+- Model call prices are produced in USD on FFT grids, then converted to coin units.
+- Put prices are derived from inverse put-call parity in coin terms.
+
+## Notes
+
+- The implementation supports warm starts from previously calibrated parameters.
+- Soft penalties are applied for Heston Feller violations and SVCJ moment-stability violations.
+- FFT grids are cached and can be cleared via `clear_fft_cache()`.
+
+For deeper implementation details, see `docs/code_documentation.md`.
