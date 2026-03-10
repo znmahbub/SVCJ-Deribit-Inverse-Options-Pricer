@@ -499,6 +499,8 @@ def calibrate_model(
     feller_eps: float = 0.0,
     svcj_moment_eps: float = 1e-6,
     max_nfev: int = 50,
+    l2_prev_strength: float = 0.0,
+    previous_params: Optional[Dict[str, float]] = None,
     verbose: int = 1,
     clear_cache_before: bool = False,
 ) -> CalibrationResult:
@@ -522,6 +524,17 @@ def calibrate_model(
         raise ValueError("model must be one of {'black','heston','svcj'}")
 
     x0 = pack(initial_params)
+
+    l2_prev_strength = float(l2_prev_strength)
+    if l2_prev_strength < 0.0:
+        raise ValueError("l2_prev_strength must be non-negative")
+
+    reg_anchor_x: Optional[np.ndarray] = None
+    if l2_prev_strength > 0.0 and previous_params is not None:
+        try:
+            reg_anchor_x = pack(previous_params)
+        except Exception as exc:
+            raise ValueError("previous_params are invalid for the selected model") from exc
 
     y_mkt_full = df["mid_price_clean"].to_numpy(dtype=float)
     w_full = _weights(df, weight_config)
@@ -549,6 +562,15 @@ def calibrate_model(
     ub = np.asarray(ub, dtype=float)
     x0 = np.minimum(np.maximum(x0, lb), ub)
 
+    reg_dim = int(x0.size) if reg_anchor_x is not None else 0
+    reg_scale = float(np.sqrt(l2_prev_strength)) if reg_dim > 0 else 0.0
+
+    if verbose > 0:
+        print(
+            "[calibrate_model] regularization "
+            f"active={reg_dim > 0}, components={reg_dim}, strength={l2_prev_strength}"
+        )
+
     def _constraint_residuals(p: Dict[str, float]) -> np.ndarray:
         pen = []
 
@@ -571,6 +593,7 @@ def calibrate_model(
     def residuals(x: np.ndarray) -> np.ndarray:
         p = unpack(x)
         pen = _constraint_residuals(p)
+        reg = reg_scale * (x - reg_anchor_x) if reg_dim > 0 else np.empty(0, dtype=float)
 
         try:
             _price_with_plan(
@@ -583,7 +606,9 @@ def calibrate_model(
         except Exception:
             r = penalty_coin * w
             r = np.where(np.isfinite(r), r, penalty_coin)
-            return np.concatenate([r, pen]) if pen.size else r
+            if pen.size:
+                r = np.concatenate([r, pen])
+            return np.concatenate([r, reg]) if reg_dim > 0 else r
 
         # r_buf = w * (y_model - y_mkt), computed in-place WITHOUT augmented assignment on r_buf
         np.subtract(y_model_buf, y_mkt, out=r_buf)
@@ -594,7 +619,9 @@ def calibrate_model(
             r_buf[bad] = penalty_coin * w[bad]
 
         r = np.where(np.isfinite(r_buf), r_buf, penalty_coin)
-        return np.concatenate([r, pen]) if pen.size else r
+        if pen.size:
+            r = np.concatenate([r, pen])
+        return np.concatenate([r, reg]) if reg_dim > 0 else r
 
     res = least_squares(
         residuals,
