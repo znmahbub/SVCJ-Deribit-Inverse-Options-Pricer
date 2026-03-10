@@ -116,6 +116,7 @@ class BatchConfig:
     train_frac: float = 0.70
     global_random_seed: int = 123
     max_nfev: Dict[str, int] = field(default_factory=lambda: dict(black=200, heston=200, svcj=200))
+    l2_prev_strength: float = 0.0
 
     # Runtime throttles
     runtime_top_expiries_by_oi: Optional[int] = None
@@ -349,6 +350,7 @@ def run_currency_to_excel(
                             runtime_max_options=cfg.runtime_max_options,
                             min_options_after_filter=cfg.min_options_after_filter,
                             warm_start=warm,
+                            l2_prev_strength=cfg.l2_prev_strength,
                             verbose=cfg.verbose,
                         )
                     except Exception as e:  # defensive: never drop an index
