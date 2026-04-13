@@ -76,14 +76,6 @@ def get_ticker(session: requests.Session, instrument_name: str) -> Dict[str, Any
     return payload.get("result", {})
 
 
-def get_perp_ticker(session: requests.Session, coin: str) -> Dict[str, Any]:
-    """
-    Get ticker info for the perpetual future (e.g., BTC-PERPETUAL, ETH-PERPETUAL).
-    """
-    instrument_name = f"{coin}-PERPETUAL"
-    return get_ticker(session, instrument_name)
-
-
 # -----------------------------
 # Main collection logic
 # -----------------------------
@@ -233,29 +225,6 @@ def main() -> int:
     outpath = os.path.join(args.outdir, f"deribit_options_snapshot_{run_ts_str}.csv")
     df.to_csv(outpath, index=False)
     print(f"Wrote {len(df):,} rows to: {outpath}")
-
-    # -----------------------------
-    # Perpetual futures snapshot (overwrite each run)
-    # -----------------------------
-    perp_rows: List[Dict[str, Any]] = []
-    for coin in currencies:
-        perp_t = get_perp_ticker(session, coin)
-        perp_rows.append(
-            {
-                "obs_datetime": run_ts.isoformat(),
-                "coin": coin,
-                "perp_futures_mark_price": safe_float(perp_t.get("mark_price")),
-                "perp_futures_best_bid": safe_float(perp_t.get("best_bid_price")),
-                "perp_futures_best_ask": safe_float(perp_t.get("best_ask_price")),
-            }
-        )
-        # small sleep to be polite, though it's only 2 calls
-        time.sleep(args.sleep)
-
-    perp_df = pd.DataFrame(perp_rows)
-    perp_outpath = os.path.join(args.outdir, "perpetual_futures_prices.csv")
-    perp_df.to_csv(perp_outpath, index=False)
-    print(f"Wrote perpetual futures snapshot to: {perp_outpath}")
 
     return 0
 
