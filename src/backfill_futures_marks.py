@@ -7,6 +7,7 @@ import math
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+from tqdm import tqdm
 
 import pandas as pd
 import requests
@@ -137,17 +138,21 @@ def read_snapshot_minimal(path: Path) -> pd.DataFrame:
 
 
 def build_snapshot_currency_combos(snapshot_files: Iterable[Path]) -> pd.DataFrame:
+    snapshot_files = list(snapshot_files)
     chunks: list[pd.DataFrame] = []
-    for path in snapshot_files:
+
+    for path in tqdm(snapshot_files, desc="Scanning snapshots", unit="file"):
         df = read_snapshot_minimal(path)
         cur = df[["timestamp", "currency"]].dropna().drop_duplicates().copy()
         cur["snapshot_file"] = path.name
         cur["snapshot_timestamp_ms"] = cur["timestamp"].map(iso_to_ms)
         chunks.append(cur)
+
     if not chunks:
         return pd.DataFrame(
             columns=["timestamp", "currency", "snapshot_file", "snapshot_timestamp_ms"]
         )
+
     out = pd.concat(chunks, ignore_index=True)
     return out.sort_values(["timestamp", "currency", "snapshot_file"]).reset_index(drop=True)
 
@@ -156,9 +161,10 @@ def build_term_futures_from_snapshots(
     snapshot_files: Iterable[Path],
     include_synthetics: bool = False,
 ) -> pd.DataFrame:
+    snapshot_files = list(snapshot_files)
     rows: list[pd.DataFrame] = []
 
-    for path in snapshot_files:
+    for path in tqdm(snapshot_files, desc="Extracting term futures", unit="file"):
         df = read_snapshot_minimal(path)
 
         if "futures_instrument_name" not in df.columns or "futures_price" not in df.columns:
@@ -333,7 +339,9 @@ def backfill_trade_marks(
     session.headers.update({"User-Agent": "SVCJ-Deribit-Pricer/1.0 (trade-mark backfill)"})
 
     out_rows: list[Dict[str, Any]] = []
-    for rec in request_rows.to_dict("records"):
+    records = request_rows.to_dict("records")
+
+    for rec in tqdm(records, desc="Fetching Deribit trade marks", unit="req"):
         instrument_name = str(rec[instrument_col])
         ts_ms = int(rec[timestamp_ms_col])
         result = fetch_nearest_trade_mark(
