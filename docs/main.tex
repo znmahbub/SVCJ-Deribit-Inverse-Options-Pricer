@@ -1,0 +1,2649 @@
+\documentclass[a4paper,titlepage,12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[T1,T2A]{fontenc}
+\usepackage[main=english,russian]{babel}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+
+\usepackage{graphicx}
+\newif\ifthesisdraftgraphics
+\thesisdraftgraphicsfalse
+\usepackage{xcolor}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{tabularx}
+\usepackage{makecell}
+
+\usepackage{enumitem}
+\usepackage{geometry}
+% \usepackage{indentfirst}
+\usepackage{ragged2e}
+
+\usepackage{natbib}
+\usepackage{chngcntr}
+\usepackage{float}
+\usepackage{pdflscape}
+
+\usepackage{listings}
+\usepackage{fancyvrb}
+\usepackage{empheq}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{latexsym}
+\usepackage{url}
+\usepackage{xurl}
+\usepackage{array}
+
+\usepackage{titlesec}
+% \titlespacing*{\paragraph}{0pt}{0.3ex}{0.8em}
+
+\usepackage[pdfborder={0 0 0},breaklinks=true,bookmarksopen=true,bookmarksopenlevel=1]{hyperref}
+\rmfamily
+%\usepackage[russian, main=english]{babel}
+
+\usepackage[skins,breakable]{tcolorbox}
+\tcbset{
+  colback=gray!3,
+  colframe=black!30,
+  boxrule=0.4pt,
+  arc=2mm,
+  left=1em, right=1em, top=0.8em, bottom=0.8em,
+  fonttitle=\bfseries
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% \usepackage{algorithmic}
+
+
+
+
+
+
+
+
+
+
+
+
+
+\makeatletter
+\def\@makechapterhead#1{%
+  \vspace*{-2em}%
+  {\parindent \z@ \raggedright \normalfont
+    \ifnum\c@secnumdepth>\m@ne
+      \Huge\bfseries \thechapter.\space%
+    \fi
+    \interlinepenalty\@M
+    \Huge\bfseries #1\par\nobreak
+    \vskip 40\p@
+  }}
+\makeatother
+\renewcommand{\bibsection}{\chapter*{References}}
+
+\geometry{
+ a4paper,
+ margin=1in}
+%\selectlanguage{english, russian}
+%\author{Mo Module}
+
+\sloppy
+
+% \addto\captionsenglish{
+%   \renewcommand{\contentsname}%
+%     {Table of contents}%
+% }
+
+% \addto\captionsrussian{
+%   \renewcommand{\contentsname}%
+%     {Table of contents}%
+% }
+
+\theoremstyle{plain}
+\newtheorem*{definition*}{Definition}
+\newtheorem*{theorem*}{Theorem}
+
+\counterwithin{equation}{section}
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+
+
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+
+
+
+
+
+% Comandos de estilo e espacamento ----------------------------------------
+\newlength{\defbaselineskip}
+\setlength{\defbaselineskip}{\baselineskip}
+\newcommand{\setlinespacing}[1]%
+           {\setlength{\baselineskip}{#1 \defbaselineskip}}
+
+\renewcommand{\baselinestretch}{1.25}
+\def\setstretch#1{\renewcommand{\baselinestretch}{#1}}
+
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=4,
+    backgroundcolor=\color{codebg}
+}
+
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+
+
+\ifthesisdraftgraphics\setkeys{Gin}{draft}\fi
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagestyle{empty}
+
+\vspace*{2cm}
+
+\begin{center}
+{NATIONAL RESEARCH UNIVERSITY\\HIGHER SCHOOL OF ECONOMICS\\{\textbf{{International College of Economics and Finance}}}}
+\end{center}
+\newcommand\fypcode{SCSE8338}
+
+
+\vspace*{1cm}
+
+\begin{center}
+
+{Nikita Mahbub}
+
+\end{center}
+
+
+\begin{center}
+\large
+{\textsc{\textbf{Pricing and Hedging Deribit Inverse Options\\under Affine Stochastic Volatility Models with Jumps}}}
+\end{center}
+
+
+\begin{center}
+
+{{Master's Thesis\\
+38.04.01 ECONOMICS\\ Master's Programme \textbf{``Financial Economics''}}}
+\end{center}
+
+\vspace*{2cm}
+
+\noindent
+\begin{minipage}[t]{0.45\textwidth}
+\textbf{Referee}\\
+Academic rank\\
+Full name
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+\raggedleft
+Scientific advisor\\
+Academic rank\\
+Alexei Akhmetshin, PhD
+\end{minipage}
+
+
+
+% \begin{otherlanguage}{russian}
+% \raggedleft
+% {{Scientific Advisor\\PhD\\Alexei Akhmetshin}}
+
+% \end{otherlanguage}
+
+\justifying
+
+
+
+\vspace{70mm}
+
+\begin{center}
+Moscow, 2026
+\end{center}
+
+
+\newpage 
+\pagestyle{plain}
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ABSTRACT
+\selectlanguage{english}
+\clearpage
+%\pagenumbering{arabic}
+\newpage
+\pagenumbering{arabic}
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+abc
+
+\setcounter{tocdepth}{1}
+\tableofcontents
+
+
+% ===================== INTRODUCTION =====================
+\chapter*{Introduction}
+\addcontentsline{toc}{chapter}{Introduction}
+abc
+
+
+
+
+
+
+% ===================== CHAPTER 1 =====================
+\chapter{Background \& Literature Review}\label{ch:litreview}
+
+This chapter reviews (i) the institutional setup of cryptocurrency inverse options on Deribit,
+(ii) the main theoretical approaches for pricing and hedging inverse options,
+(iii) empirical evidence that stochastic volatility and jumps are central for crypto option pricing, and (iv) calibration of model parameters together with the Fourier/FFT pricing methodology that enables fast valuation of large option panels.
+
+\section{Crypto derivatives and Deribit inverse options}\label{sec:deribit_inverse}
+
+Crypto derivatives are primarily listed on specialised exchanges and are typically collateralised in crypto rather than fiat. Although direct options on cryptocurrencies denominated in fiat do exist, this market structure motivates the dominance of \emph{inverse} contracts: instruments where the payoff and premium are denominated in the underlying coin, while the strike is typically quoted in USD. Since the empirical part of this thesis is based on Deribit option quotes, which is the most popular exchange for cryptocurrency options, we first clarify the mechanics and payoff conventions of inverse options.
+
+Deribit lists European-style inverse options on BTC and ETH, with contract sizes equal to 1 BTC for BTC options and 1 ETH for ETH options. Option strikes are quoted in USD, while option prices (premia) and settlement amounts are denominated in the underlying
+coin. The underlying of a listed option is a termed futures contract (possibly synthetic) with the same expiry. At expiry, Deribit computes a \emph{delivery price} as the time-weighted average of the Deribit index over a specified window (e.g., 07:30--08:00 UTC), and then settles options in coin units based
+on intrinsic value divided by the delivery price \citep{DeribitInverseOptions2025}.
+
+Let $F_T$ denote the USD delivery price of the underlying futures contract at maturity $T$ and $K$ denote the USD strike. The (cash) USD
+intrinsic values are $(F_T-K)^+$ for calls and $(K-F_T)^+$ for puts. The corresponding inverse option
+payoffs in coin units are therefore
+\begin{equation}
+r_{\text{call}}(F_T) = \frac{(F_T-K)^+}{F_T}, \qquad
+r_{\text{put}}(F_T)  = \frac{(K-F_T)^+}{F_T}.
+\label{eq:inverse_payoff_deribit}
+\end{equation}
+
+\section{Pricing and hedging inverse options}\label{sec:inverse_pricing}
+
+Inverse payoffs naturally arise when the numeraire is changed from USD cash (or a money-market account) to the underlying futures price. This viewpoint yields clean relationships between (i) the price of a regular USD-settled option and (ii) the price of the corresponding inverse option. It also implies that the \emph{delta} used for hedging inverse options differs from the textbook Black--Scholes/Black delta.
+
+\subsection{\citet{LucicSepp2024}: numeraire invariance, valuation, and the ``net delta''}\label{subsec:lucic_sepp}
+
+The central inverse option pricing reference for this thesis is \citet{LucicSepp2024}. They formalise inverse options using a martingale valuation approach
+and the \emph{numeraire invariance principle} \citep{GemanElKarouiRochet1995}, which states that the value of a payoff does not depend on which asset you use as the numeraire, as long as prices are computed under the corresponding martingale measure. In their notation, $F_t$ is the
+USD price of the underlying futures.
+
+Their main result is a no-arbitrage identity linking direct (USD-settled) European option values and inverse (coin-settled) values. Denoting by $V(t,\cdot)$ the USD value of the regular option and by $\widetilde V(t,\cdot)$ the coin value of the inverse option, they show that
+\begin{equation}
+V(t,\cdot) = F_t\,\widetilde V(t,\cdot),
+\label{eq:regular_inverse_relation}
+\end{equation}
+under suitable conditions ensuring the existence of both the USD and futures martingale measures \citep{LucicSepp2024}.
+Equation \eqref{eq:regular_inverse_relation} provides a direct route for inverse pricing: any model and numerical method that yields $V(t,\cdot)$ for a standard European option can be repurposed for inverse options by scaling with $1/F_t$.
+
+A second key contribution of \citet{LucicSepp2024} is the model-independent delta relationship implied
+by \eqref{eq:regular_inverse_relation}. Differentiating with respect to $S$ yields that the hedge ratio
+for the inverse option involves an adjustment by the option premium itself. In their notation, the
+hedging position in inverse futures contracts is
+\begin{equation}
+\widetilde\Delta(t,\cdot)= \Delta(t,\cdot) - \frac{V(t,\cdot)}{F_t},
+\label{eq:premium_adjusted_delta}
+\end{equation}
+where $\Delta(t,\cdot)$ is the delta of the corresponding regular option, and $\widetilde\Delta(t,\cdot)$ is the premium-adjusted or net delta of the inverse option.
+
+Finally, \citet{LucicSepp2024} emphasise that delta hedging of listed inverse options is most naturally implemented using inverse futures contracts. Although the underlying of a listed option is a termed futures contract with the same expiry, such term futures are often substantially less liquid than perpetual futures, particularly at short maturities. In contrast, perpetual futures are highly liquid and constitute the dominant delta-one instrument on major cryptocurrency exchanges and therefore serve as the primary vehicle for dynamic hedging.
+
+\subsection{\citet{AlexanderChenImeraj2023}: inverse options as currency-pair/quanto contracts}\label{subsec:alexander_quanto}
+
+An alternative interpretation of inverse options is to view them through an FX/currency-pair lens:
+holding BTC while measuring value in USD naturally resembles an exchange-rate setting. In
+\citet{AlexanderChenImeraj2023}, the authors provide a systematic exposition of direct and inverse
+crypto options, discuss market incompleteness in these markets, and frame inverse options alongside
+quanto structures that are relevant for fiat-based investors.
+
+While \citet{LucicSepp2024} focus on num\'eraire invariance and exchange conventions for valuation and hedging, \citet{AlexanderChenImeraj2023} emphasise that inverse options can be analysed using the same conceptual toolkit as currency options, including quanto adjustments in the presence of exchange-rate risk and non-trivial collateralisation.
+
+\section{Why stochastic volatility and jumps matter in crypto option pricing}\label{sec:svj_empirical}
+
+Empirically, cryptocurrency return distributions exhibit heavy tails, sharp discontinuities, and
+strong time-variation in volatility. In option markets, these features manifest as pronounced implied
+volatility smiles/skews and term structures that are difficult to reconcile with constant-volatility diffusion structures. This section focuses on empirical evidence supporting the use of stochastic volatility and jump components when modelling crypto option prices.
+
+\subsection{\citet{ScailletTreccaniTrevisan2020}: high-frequency evidence of jumps}\label{subsec:scaillet_jumps}
+
+\citet{ScailletTreccaniTrevisan2020} study high-frequency Bitcoin data and document economically
+significant jump behaviour. While their focus is not limited to option prices, their results provide
+foundational empirical motivation for jump components in option pricing models: if jumps are a structural feature of the underlying, option-implied distributions and tails are naturally affected. This type of evidence supports modelling choices that allow discontinuities rather than relying on
+pure diffusion volatility to match option-implied tail risk.
+
+\subsection{\citet{ChenDengNie2024}: option-implied evidence linking IV slopes to jumps}\label{subsec:chen_iv_slopes}
+
+\citet{ChenDengNie2024} provide option-market evidence that connects the shape of the implied
+volatility surface to jump risk. They develop a theoretical relation between implied volatility
+slopes and positive/negative price jumps, and empirically study this mechanism using tick-by-tick
+Bitcoin options data from Deribit. Their results support the view that jump components are not merely
+a convenient modelling choice but are reflected in the cross-sectional structure of implied
+volatility.
+
+\subsection{\citet{ChaimLaurini2018} and \citet{ShenUrquhartWang2020}: evidence of jumps in volatility}
+\label{subsec:vol_jumps_crypto}
+
+Evidence for jumps in crypto markets extends beyond discontinuities in returns: volatility itself also exhibits abrupt, jump-like behavior. \citet{ChaimLaurini2018} model Bitcoin with stochastic volatility and jumps and find that volatility jumps are economically meaningful; in particular, they report that volatility shocks associated with jumps have persistent effects, consistent with the idea that volatility dynamics are not well captured by purely continuous diffusions.
+
+Complementary high-frequency evidence comes from \citet{ShenUrquhartWang2020}, who study Bitcoin volatility forecasting using realized volatility decompositions that explicitly separate continuous and jump components. Their results indicate that jump-related components of realized variance are important for explaining and forecasting volatility, reinforcing that volatility contains discontinuous movements that are relevant for option pricing.
+
+\subsection{\citet{HouEtAl2020}: SVCJ modelling and evidence from crypto options}\label{subsec:hou_svcj}
+
+The core modelling reference for this thesis is \citet{HouEtAl2020}, who propose pricing
+cryptocurrency options with a stochastic volatility model that includes correlated jumps in both the price and volatility processes (SVCJ model). Their motivation is that price jumps and volatility jumps co-occur in crypto markets and can materially affect option prices, especially for short
+maturities and far-from-the-money strikes.
+
+A key feature of their specification is a joint jump structure that allows dependence between return
+jumps and volatility jumps. In simplified form (suppressing some risk-neutral drift details), the SVCJ
+dynamics are
+\begin{align}
+d\log F_t &= \big(\cdot\big)\,dt + \sqrt{V_t}\,dW_t^S + Z_t^y\,dN_t,\\
+dV_t      &= \kappa(\theta - V_t)\,dt + \sigma_v\sqrt{V_t}\,dW_t^V + Z_t^v\,dN_t,
+\end{align}
+where $N_t$ is a Poisson process with intensity $\lambda$, and $(W^S,W^V)$ are correlated Brownian
+motions \citep{HouEtAl2020}. The jump sizes are specified to allow co-jumps and dependence through a
+conditional distribution:
+\begin{equation}
+Z_t^v \sim \text{Exponential}(\ell_v), \qquad
+Z_t^y\,\big|\,Z_t^v \sim \mathcal{N}\!\left(\ell_y + q_j Z_t^v,\; r_y^2\right),
+\label{eq:hou_jump_spec}
+\end{equation}
+so that the price jump distribution depends on the volatility jump size through $q_j$. Empirically, \citet{HouEtAl2020} report that incorporating this structure is
+important for fitting crypto option prices, and they document economically meaningful co-jump features in their estimation results.
+
+For the purposes of this thesis, the significance of \citet{HouEtAl2020} is twofold. First, it
+provides a concrete affine SV-with-jumps specification that is empirically supported in crypto option
+data. Second, it offers a modelling backbone that can be combined with the inverse-option valuation
+identity in \citet{LucicSepp2024}, thereby enabling inverse option pricing under SVCJ dynamics.
+
+\section{Research gap and contribution}\label{sec:gap_contrib}
+
+Sections \ref{sec:deribit_inverse}--\ref{sec:svj_empirical} highlight that (i) the most liquid listed crypto options are inverse contracts, (ii) inverse pricing and delta conventions are theoretically
+well understood under numeraire invariance, and (iii) stochastic volatility and jumps are empirically important for crypto option surfaces. However, these strands have not yet been fully integrated in a single empirical
+study focused on inverse options.
+
+\subsection{What the inverse-option literature delivers (and what it does not)}\label{subsec:gap_inverse_lit}
+
+\citet{LucicSepp2024} provide the key valuation identity \eqref{eq:regular_inverse_relation} and the
+premium-adjusted delta formula \eqref{eq:premium_adjusted_delta}, together with an empirical study of
+systematic strategies and the role of perpetual futures for hedging. Their focus, however, is not on
+developing a crypto-specific stochastic volatility with jumps model for inverse option prices.
+Similarly, \citet{AlexanderChenImeraj2023} clarify inverse and quanto structures and relate them to FX pricing intuition, but do not develop an empirical pricing and calibration framework for inverse option surfaces that includes stochastic volatility and jumps.
+
+\subsection{What the crypto SV+jumps literature delivers (and what it does not)}\label{subsec:gap_svj_lit}
+
+Empirical and option-market studies provide strong evidence that stochastic volatility and jumps in returns and volatility matter in crypto contexts \citep{ScailletTreccaniTrevisan2020,ChenDengNie2024,ChaimLaurini2018,ShenUrquhartWang2020}. In particular, \citet{HouEtAl2020} develop and empirically support an SVCJ framework for pricing cryptocurrency options. Yet, their analysis is primarily aligned with ``direct'' (USD-denominated) options on the spot asset as the underlying, and does not explicitly target the inverse payoff structure of options on termed futures listed on Deribit.
+
+\subsection{Our contribution}\label{subsec:thesis_contribution}
+
+This thesis aims to fill the above gap by combining the inverse-option valuation framework with a crypto-specific affine stochastic volatility model with jumps, calibrating the SVCJ model to Deribit options data, and evaluating it against a set of baseline models:
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Theory:} Use the numeraire invariance identity of \citet{LucicSepp2024} to price inverse options on futures via standard (USD-like) option prices, and derive the corresponding hedging delta using the
+premium-adjusted formula \eqref{eq:premium_adjusted_delta}.
+\item \textbf{Model:} Adopt the SVCJ model in \citet{HouEtAl2020}
+(equation \eqref{eq:hou_jump_spec}) to price inverse options on futures.
+\item \textbf{Empirics:} Calibrate the competing models (Black, Heston, SVCJ) to Deribit BTC and ETH inverse option panels and produce time series of parameter estimates by repeating calibration on successive option-chain
+snapshots.
+\item \textbf{Evaluation:} Compare models using out-of-sample pricing errors and, additionally, assess risk-management relevance via delta-hedging performance.
+\end{itemize}
+
+The working hypothesis of the paper can be formulated as follows:\\ \emph{A crypto-specific affine stochastic volatility model with correlated jumps in the return and volatility processes (SVCJ) improves} (i) cross-sectional fit to observed market prices \emph{and} (ii) delta-hedging performance \emph{for Deribit inverse options relative to Black and Heston benchmarks.}
+
+The testable implications of this hypothesis are 
+\begin{itemize}[topsep=0pt, itemsep=0pt, parsep=0pt]
+  \item lower \emph{out-of-sample pricing error}, and
+  \item lower \emph{hedging error}
+\end{itemize}
+for the SVCJ model, compared to a set of baseline models.
+
+The next sections briefly review the core empirical tools (calibration and Fourier pricing) that make our analysis feasible.
+
+\section{Calibration overview: cross-sectional fitting by MSE minimization}\label{sec:calibration_overview}
+
+In applied option pricing, model parameters are typically estimated by \emph{cross-sectional}
+calibration: at each observation time $t$ one fits a parameter vector $\theta_t$ to the set of
+contemporaneous option quotes across strikes and maturities. The calibration objective is commonly a
+mean squared error (MSE) criterion based on either prices or implied volatilities.
+
+Let $\{(K_i,T_i)\}_{i=1}^{N_t}$ denote the observed option contracts at time $t$, and let
+$C^{\text{mkt}}_{t,i}$ denote market prices (or implied vols). A standard calibration problem is
+\begin{equation}
+\widehat{\theta}_t \in \arg\min_{\theta\in\Theta}\;
+\sum_{i=1}^{N_t} w_{t,i}\Big(C^{\text{model}}(t;K_i,T_i,\theta)-C^{\text{mkt}}_{t,i}\Big)^2,
+\label{eq:calibration_mse}
+\end{equation}
+where $w_{t,i}\ge 0$ are weights (e.g., uniform weights, or weights that down-weight illiquid options),
+and $\Theta$ is the admissible parameter set (e.g., enforcing positivity of variance processes,
+Feller-type constraints, stationarity restrictions, etc.). In crypto option applications, the large
+number of options per snapshot and the need to repeat \eqref{eq:calibration_mse} over time makes fast
+pricing methods essential \citep{MadanReynersSchoutens2019}.
+
+In this thesis, ``time-varying calibration results'' correspond to the sequence
+$\{\widehat{\theta}_{t_j}\}_{j=1}^J$ obtained by applying \eqref{eq:calibration_mse} at each snapshot
+time $t_j$ (e.g., twice per day), separately for BTC and ETH panels. This produces parameter time
+series that can be analysed for stability, regime shifts, and their relation to market conditions.
+
+\section{Fourier-based pricing: characteristic functions and FFT}\label{sec:fft_affine}
+
+Cross-sectional calibration requires pricing hundreds to thousands of options repeatedly. For affine stochastic volatility models, a standard approach is to price European options via the characteristic function of the log-price under the relevant pricing measure.
+
+If $X_T=\log F_T$, and if the model yields a closed-form characteristic function $\phi_T(u)=\mathbb{E}[\exp(iuX_T)\mid\mathcal{F}_t]$, then option
+prices can be obtained using Fourier inversion techniques. In particular, the FFT method of
+\citet{CarrMadan1999} converts option valuation across a grid of strikes into fast convolution-type
+computations, making it highly suitable for calibration loops. The reason affine models are
+especially convenient is that their characteristic functions are exponential-affine in the state
+variables, as formalised for affine jump diffusions in \citet{DuffiePanSingleton2000} and exemplified
+by the Heston model \citep{Heston1993}.
+
+For inverse options, the valuation identity \eqref{eq:regular_inverse_relation} implies a practical
+workflow:
+\begin{enumerate}[leftmargin=2em]
+\item compute the corresponding regular (USD-like) European option value $V(t,\cdot)$ under the chosen
+affine model using characteristic functions and FFT;
+\item obtain the inverse option value by $\widetilde V(t,\cdot)=V(t,\cdot)/F_t$.
+\end{enumerate}
+This is the computational strategy adopted in Chapter~\ref{chap:svcj_inverse}.
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Pricing and Hedging Deribit Inverse Options under the SVCJ Model: Theoretical Background}
+\label{chap:svcj_inverse}
+
+This chapter develops a pricing and hedging framework for cryptocurrency \emph{inverse} European options traded on Deribit, using the stochastic volatility model with correlated jumps in returns and volatility (SVCJ). We proceed in five steps:
+(i) specify the SVCJ dynamics as in \citet{HouEtAl2020} and adapt it to options written on \emph{termed futures}; (ii) derive the \emph{characteristic function} from first principles; (iii) price inverse options under the \emph{futures numeraire} following the logic of \citet{LucicSepp2024}; (iv) derive model deltas and the premium-adjusted \emph{net delta} used for inverse option hedging; (v) show how an inverse option on a term futures contract can be hedged using the more liquid inverse perpetual futures and how to evaluate hedging performance via hedged P\&L.
+
+Throughout, we focus on European options on a \emph{term futures} contract with the same expiry as the option, which is the standard convention on Deribit \citep{LucicSepp2024}.
+
+\section{The SVCJ model for term-futures underlyings}
+\label{sec:svcj_model}
+
+\subsection{Baseline SVCJ specification \citep{HouEtAl2020}}
+\label{subsec:svcj_hou}
+
+Let $F_t \equiv F_t^{(T)}$ denote the \emph{term futures} price (quoted in USD per coin) for maturity $T$, observed at time $t \in [0,T]$. Define the log-futures price
+\begin{equation}
+X_t := \log F_t.
+\end{equation}
+
+Following \citet{HouEtAl2020}, we consider an SVCJ model in which both the log-price and the variance process jump together through a common Poisson process. Let $N_t$ be a Poisson process with constant intensity $\lambda > 0$ and let $(W_{1t},W_{2t})$ be two Brownian motions with instantaneous correlation $\rho \in (-1,1)$:
+\begin{equation}
+\mathrm{corr}(\mathrm{d}W_{1t},\mathrm{d}W_{2t})=\rho.
+\end{equation}
+The SVCJ dynamics under an \emph{arbitrary pricing measure} take the form
+\begin{empheq}[box=\fbox]{align}
+\mathrm{d}X_t &= b_t\,\mathrm{d}t + \sqrt{V_t}\,\mathrm{d}W_{1t} + Z^{y}\,\mathrm{d}N_t, \label{eq:svcj_X}\\
+\mathrm{d}V_t &= \kappa(\theta - V_t)\,\mathrm{d}t + \sigma_v \sqrt{V_t}\,\mathrm{d}W_{2t} + Z^{v}\,\mathrm{d}N_t, \label{eq:svcj_V}
+\end{empheq}
+with parameters $\kappa>0$ (mean reversion), $\theta>0$ (long-run variance), $\sigma_v>0$ (vol-of-vol), and $V_t \ge 0$. The drift $b_t$ depends on the chosen numeraire, and is derived below.
+
+The jump sizes $(Z^y,Z^v)$ are specified as in \citet{HouEtAl2020}: the volatility jump $Z^v$ is exponentially distributed, and the return jump $Z^y$ is Gaussian conditional on $Z^v$:
+\begin{align}
+Z^{v} &\sim \text{Exp(mean } \ell_v \text{)}, \qquad \ell_v>0, \label{eq:Zv_exp}\\
+Z^{y}\,|\,Z^{v} &\sim \mathcal{N}\!\big(\ell_y + \rho_j Z^{v},\, \sigma_y^2\big), \qquad \sigma_y>0. \label{eq:Zy_condnorm}
+\end{align}
+Here $\ell_y \in \mathbb{R}$ controls the average log-price jump, $\sigma_y$ controls the variance of log-price jumps, and $\rho_j \in \mathbb{R}$ controls the dependence between price-jump and volatility-jump sizes.
+
+\subsection{SVCJ model under the futures price numeraire}
+\label{subsec:martingale_restriction}
+
+For options written on a futures contract with the same maturity $T$ and with deterministic discounting, it is natural to work under a measure under which $F_t$ is a martingale.\footnote{For crypto inverse options on Deribit, discounting is assumed to be negligible \citep{LucicSepp2024}.}
+
+We therefore choose the drift $b_t$ in \eqref{eq:svcj_X} so that the term-futures price
+\[
+F_t := e^{X_t}
+\]
+is a (local) martingale under the chosen pricing measure. Since $F_t$ may jump when $X_t$ jumps, it
+is convenient to use the standard left-limit notation
+\[
+F_{t^-} := \lim_{s\uparrow t} F_s,
+\]
+i.e., the value of the process immediately before time $t$ (equivalently, $F_{t^-}$ is the
+pre-jump value, while $F_t$ is the post-jump value). The martingale restriction can then be written as
+\begin{equation}
+\mathbb{E}\!\left[\frac{\mathrm{d}F_t}{F_{t^-}} \,\bigg|\, \mathcal{F}_{t^-}\right] = 0.
+\label{eq:martingale_cond}
+\end{equation}
+
+\begin{theorem*}[It\^{o}'s formula for jump diffusions, \citet{OksendalSulem2007}]
+\label{thm:ito_jump}
+Let $(Y_t)_{t\ge 0}$ be a one-dimensional jump--diffusion process of the form
+\begin{equation}
+\mathrm{d}Y_t
+=
+\mathrm{d}Y_t^{(c)} + \Delta Y_t\,\mathrm{d}N_t,
+\qquad
+\mathrm{d}Y_t^{(c)} := a_t\,\mathrm{d}t + b_t\,\mathrm{d}W_t,
+\label{eq:Y_jump_dynamics}
+\end{equation}
+where $(W_t)_{t\ge 0}$ is a Brownian motion, $(N_t)_{t\ge 0}$ is a Poisson process, and $\Delta Y_t$
+denotes the jump size at a jump time. Let $f:\mathbb{R}\to\mathbb{R}$ be twice continuously
+differentiable. Then,
+\begin{equation}
+\mathrm{d}f(Y_t)
+=
+f'(Y_{t^-})\,\mathrm{d}Y_t^{(c)}
++
+\frac{1}{2}f''(Y_{t^-})\,\mathrm{d}[Y^{(c)}]_t
++
+\Big(f(Y_{t^-}+\Delta Y_t)-f(Y_{t^-})\Big)\,\mathrm{d}N_t,
+\label{eq:ito_jump_theorem}
+\end{equation}
+where $Y_{t^-}=\lim_{s\uparrow t}Y_s$ and $\mathrm{d}[Y^{(c)}]_t=b_t^2\,\mathrm{d}t$ is the quadratic variation of the continuous part of the process.
+\end{theorem*}
+
+Now, apply It\^{o}'s formula for jump diffusions to $F_t=f(X_t)=e^{X_t}$.  Separating the continuous and jump parts of $X_t$:
+\[
+\mathrm{d}X_t
+=
+\mathrm{d}X_t^{(c)} + Z^y\,\mathrm{d}N_t,
+\qquad
+\mathrm{d}X_t^{(c)} := b_t\,\mathrm{d}t + \sqrt{V_t}\,\mathrm{d}W_{1t}.
+\]
+The continuous quadratic variation is
+\[
+\mathrm{d}[X^{(c)}]_t = (\mathrm{d}X_t^{(c)})^2 = V_t\,\mathrm{d}t.
+\]
+Since $f'(x)=f''(x)=e^x$, It\^{o}'s formula gives
+\begin{align}
+\mathrm{d}F_t
+&=
+f'(X_{t^-})\,\mathrm{d}X_t^{(c)}
++\frac12 f''(X_{t^-})\,\mathrm{d}[X^{(c)}]_t
++\Big(f(X_{t^-}+Z^y)-f(X_{t^-})\Big)\,\mathrm{d}N_t
+\nonumber\\
+&=
+F_{t^-}\Big(b_t\,\mathrm{d}t+\sqrt{V_t}\,\mathrm{d}W_{1t}\Big)
++\frac12 F_{t^-}V_t\,\mathrm{d}t
++F_{t^-}\big(e^{Z^y}-1\big)\,\mathrm{d}N_t
+\nonumber\\
+&=
+F_{t^-}\left(b_t+\frac12V_t\right)\mathrm{d}t
++F_{t^-}\sqrt{V_t}\,\mathrm{d}W_{1t}
++F_{t^-}\big(e^{Z^y}-1\big)\,\mathrm{d}N_t.
+\label{eq:dF_expanded}
+\end{align}
+Dividing by $F_{t^-}$ yields
+\begin{equation}
+\frac{\mathrm{d}F_t}{F_{t^-}}
+=
+\left(b_t + \frac{1}{2}V_t\right)\mathrm{d}t
++ \sqrt{V_t}\,\mathrm{d}W_{1t}
++ \big(e^{Z^y}-1\big)\,\mathrm{d}N_t.
+\label{eq:dF_over_Fminus}
+\end{equation}
+which is the expression used to impose the martingale condition \eqref{eq:martingale_cond}.
+
+Taking conditional expectations in \eqref{eq:dF_over_Fminus}, we compute
+\begin{align}
+\mathbb{E}\!\left[\frac{\mathrm{d}F_t}{F_{t^-}} \,\bigg|\, \mathcal{F}_{t^-}\right]
+&=
+\mathbb{E}\!\left[
+\left(b_t + \frac{1}{2}V_t\right)\mathrm{d}t
++ \sqrt{V_t}\,\mathrm{d}W_{1t}
++ \big(e^{Z^y}-1\big)\,\mathrm{d}N_t
+\;\bigg|\; \mathcal{F}_{t^-}
+\right].
+\end{align}
+Since $\mathrm{d}W_{1t}$ has zero conditional mean and is independent of $\mathcal{F}_{t^-}$, and
+since $\mathrm{d}N_t$ is independent of $\mathcal{F}_{t^-}$ with
+$\mathbb{E}[\mathrm{d}N_t \mid \mathcal{F}_{t^-}] = \lambda\,\mathrm{d}t$, this reduces to
+\begin{align}
+\mathbb{E}\!\left[\frac{\mathrm{d}F_t}{F_{t^-}} \,\bigg|\, \mathcal{F}_{t^-}\right]
+&=
+\left(b_t + \frac{1}{2}V_t\right)\mathrm{d}t
++
+\mathbb{E}\!\left[e^{Z^y}-1\right]\,
+\mathbb{E}\!\left[\mathrm{d}N_t \mid \mathcal{F}_{t^-}\right]
+\nonumber\\
+&=
+\left[
+\left(b_t + \frac{1}{2}V_t\right)
++ \lambda\,\mathbb{E}\!\left[e^{Z^y}-1\right]
+\right]\mathrm{d}t.
+\label{eq:cond_expectation_drift}
+\end{align}
+Imposing the martingale condition
+$\mathbb{E}[\mathrm{d}F_t/F_{t^-} \mid \mathcal{F}_{t^-}]=0$
+therefore yields
+\begin{equation}
+\left(b_t + \frac{1}{2}V_t\right)
++ \lambda\,\mathbb{E}\!\left[e^{Z^y}-1\right]
+= 0,
+\end{equation}
+and hence the drift of the log-futures process must be chosen as
+\begin{equation}
+\boxed{
+b_t
+=
+-\frac{1}{2}V_t
+-
+\lambda \kappa_F,
+\qquad
+\kappa_F := \mathbb{E}\!\left[e^{Z^y}-1\right].}
+\label{eq:drift_martingale}
+\end{equation}
+Under the Hou-type jump specification \eqref{eq:Zv_exp}--\eqref{eq:Zy_condnorm}, $\kappa_F$ is available in closed form:
+\begin{align}
+\mathbb{E}\!\left[e^{Z^y}\mid Z^v\right]
+&=
+\exp\!\left(\ell_y + \rho_j Z^v + \frac{1}{2}\sigma_y^2\right),
+\\
+\mathbb{E}\!\left[e^{Z^y}\right]
+&=
+\exp\!\left(\ell_y + \frac{1}{2}\sigma_y^2\right)\,
+\mathbb{E}\!\left[e^{\rho_j Z^v}\right].
+\end{align}
+If $Z^v$ is exponential with mean $\ell_v$, then for any complex $s$ with $\mathrm{Re}(s) < 1/\ell_v$,
+\begin{equation}
+\mathbb{E}[e^{s Z^v}] = \frac{1}{1-\ell_v s}.
+\end{equation}
+Therefore, provided $1-\ell_v\rho_j>0$ (when $\rho_j>0$),
+\begin{equation}
+\boxed{
+\kappa_F
+=
+\exp\!\left(\ell_y + \frac{1}{2}\sigma_y^2\right)\frac{1}{1-\ell_v\rho_j} - 1.}
+\label{eq:kappaF_closed}
+\end{equation}
+Then, the SVCJ dynamics under the futures price numeraire are as follows.
+
+\begin{tcolorbox}[title={SVCJ dynamics under the futures price numeraire}]
+\begin{align}
+\mathrm{d}X_t
+&=
+\left(
+-\frac{1}{2}V_t
+-
+\lambda \kappa_F
+\right)\mathrm{d}t
++
+\sqrt{V_t}\,\mathrm{d}W_{1t}
++
+Z^y\,\mathrm{d}N_t,
+\label{eq:svcj_X_final}
+\\[4pt]
+\mathrm{d}V_t
+&=
+\kappa(\theta - V_t)\,\mathrm{d}t
++
+\sigma_v \sqrt{V_t}\,\mathrm{d}W_{2t}
++
+Z^v\,\mathrm{d}N_t,
+\label{eq:svcj_V_final}
+\end{align}
+with $\mathrm{corr}(\mathrm{d}W_{1t},\mathrm{d}W_{2t})=\rho$, where
+$N_t$ is a Poisson process with intensity $\lambda$, and the jump sizes satisfy
+\begin{align}
+Z^{v} &\sim \text{Exponential(mean } \ell_v \text{)}, \\
+Z^{y}\mid Z^{v}
+&\sim
+\mathcal{N}\!\left(\ell_y + \rho_j Z^{v},\, \sigma_y^2\right).
+\end{align}
+The jump compensator $\kappa_F=\mathbb{E}[e^{Z^y}-1]$ is given in closed form by
+\begin{equation}
+\kappa_F
+=
+\exp\!\left(\ell_y + \frac12\sigma_y^2\right)
+\frac{1}{1-\ell_v\rho_j}
+-
+1,
+\qquad
+1-\ell_v\rho_j>0.
+\end{equation}
+The parameters of the model are:
+\begin{equation}
+\Theta_{\mathrm{SVCJ}}
+=
+\big(
+\kappa,\theta,\sigma_v,\rho,\lambda,
+\ell_y,\sigma_y,\ell_v,\rho_j
+\big).
+\end{equation}
+\end{tcolorbox}
+
+To ensure non-negativity of the variance process, we additionally impose the standard Feller
+condition
+\begin{equation}
+2\kappa\theta \ge \sigma_v^2,
+\end{equation}
+which is sufficient (though not necessary) for $V_t$ to remain strictly positive \citep{Heston1993}.
+Additional admissibility conditions include $\lambda>0$, $\ell_v>0$, and
+$1-\ell_v\rho_j>0$, ensuring finite jump moments and well-defined characteristic
+functions.
+
+
+\section{Deriving the characteristic function for the SVCJ model}
+\label{sec:cf_derivation}
+
+This section derives the characteristic function of $X_T=\log F_T$ conditional on $(X_t,V_t)$ under the martingale drift choice \eqref{eq:drift_martingale}. The derivation follows the affine-jump-diffusion logic underlying SVCJ-type models \citep{DuffiePanSingleton2000, HouEtAl2020}.
+
+\subsection{Martingale approach to the characteristic function}
+\label{subsec:martingale_cf}
+
+We derive the characteristic function using a martingale argument based on It\^{o}'s formula for jump diffusions.
+
+Fix $u\in\mathbb{C}$ and define the \emph{conditional characteristic function}
+\begin{equation}
+\boxed{
+\phi(u;t,T)
+:=
+\mathbb{E}\!\left[e^{iuX_T}\mid X_t=x,\;V_t=v\right].}
+\end{equation}
+
+Since $(X_t,V_t)$ solves a system of stochastic differential equations whose coefficients depend only on the current state and are driven by Brownian motions and a Poisson process with independent increments, the process $(X_t,V_t)$ is a time-homogeneous Markov process \citep{OksendalSulem2007}.
+Then, $\phi(u;t,T)$ depends on the current state only through
+$(t,x,v)$. Our objective is to determine $\phi$ explicitly.
+
+Motivated by the affine structure of the SVCJ model, we conjecture that the characteristic function
+admits an exponential-affine representation of the form
+\begin{equation}
+\phi(u;t,T)
+=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big),
+\qquad
+\tau:=T-t,
+\label{eq:affine_ansatz}
+\end{equation}
+with terminal conditions
+\[
+A(0;u)=0,
+\qquad
+B(0;u)=0,
+\]
+so that $\phi(u;T,T)=e^{iuX_T}$ \citep{DuffiePanSingleton2000}.
+
+Define the process
+\begin{equation}
+\Phi_t
+:=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big).
+\end{equation}
+If the functions $A(\cdot;u)$ and $B(\cdot;u)$ are chosen such that $(\Phi_t)_{t\in[0,T]}$ is a
+martingale, then by construction
+\[
+\Phi_t
+=
+\mathbb{E}\!\left[\Phi_T\mid\mathcal{F}_t\right]
+=
+\mathbb{E}\!\left[e^{iuX_T}\mid\mathcal{F}_t\right],
+\]
+and hence $\Phi_t=\phi(u;t,T)$ is the characteristic function.
+
+\subsection{Application of It\^{o}'s formula to $\Phi_t$}
+\label{subsec:ito_phi}
+
+We derive the \emph{Riccati equations} for $A(\tau;u)$ and $B(\tau;u)$, i.e., the ODEs that can be solved to get the characteristic function, by applying It\^{o}'s formula for
+jump diffusions to the exponential-affine process
+\begin{equation}
+\Phi_t
+:=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big),
+\qquad \tau:=T-t,
+\label{eq:Phi_def}
+\end{equation}
+where $u\in\mathbb{C}$ is fixed. The functions $A(\tau;u)$ and $B(\tau;u)$ are deterministic in $\tau$
+and will be chosen so that $(\Phi_t)_{t\in[0,T]}$ is a martingale. Note that $\tau=T-t$ implies
+$\mathrm{d}\tau=-\mathrm{d}t$.
+
+\begin{theorem*}[It\^{o}'s formula for two-dimensional jump--diffusions, \citep{OksendalSulem2007}]
+\label{thm:ito_2d_jump}
+Let $(X_t,V_t)_{t\ge 0}$ be a two-dimensional jump--diffusion of the form
+\begin{align}
+\mathrm{d}X_t &= \mathrm{d}X_t^{(c)} + Z^y\,\mathrm{d}N_t,\\
+\mathrm{d}V_t &= \mathrm{d}V_t^{(c)} + Z^v\,\mathrm{d}N_t,
+\end{align}
+where $(X_t^{(c)},V_t^{(c)})$ denotes the continuous part, $N_t$ is a Poisson process,
+and $(Z^y,Z^v)$ denotes the jump sizes (possibly random, and independent of $\mathcal F_{t^-}$).
+Let $\Phi:[0,\infty)\times\mathbb R\times\mathbb R_+\to\mathbb R$ be once continuously differentiable
+in $t$ and twice continuously differentiable in $(x,v)$. Define $\Phi_t:=\Phi(t,X_t,V_t)$ and denote
+left limits by $X_{t^-}:=\lim_{s\uparrow t}X_s$ and $V_{t^-}:=\lim_{s\uparrow t}V_s$.
+Then $\Phi_t$ admits the decomposition
+\begin{equation}
+\mathrm{d}\Phi_t
+=
+\mathrm{d}\Phi_t^{(c)}
++
+\mathrm{d}\Phi_t^{(J)},
+\end{equation}
+where the continuous part is
+\begin{align}
+\mathrm{d}\Phi_t^{(c)}
+&=
+\frac{\partial \Phi}{\partial t}(t,X_{t^-},V_{t^-})\,\mathrm{d}t
++
+\frac{\partial \Phi}{\partial x}(t,X_{t^-},V_{t^-})\,\mathrm{d}X_t^{(c)}
++
+\frac{\partial \Phi}{\partial v}(t,X_{t^-},V_{t^-})\,\mathrm{d}V_t^{(c)}
+\nonumber\\
+&\quad
++
+\frac{1}{2}\frac{\partial^2 \Phi}{\partial x^2}(t,X_{t^-},V_{t^-})\,\big(\mathrm{d}X_t^{(c)}\big)^2
++
+\frac{1}{2}\frac{\partial^2 \Phi}{\partial v^2}(t,X_{t^-},V_{t^-})\,\big(\mathrm{d}V_t^{(c)}\big)^2
+\nonumber\\
+&\quad
++
+\frac{\partial^2 \Phi}{\partial x\,\partial v}(t,X_{t^-},V_{t^-})\,\mathrm{d}X_t^{(c)}\,\mathrm{d}V_t^{(c)},
+\label{eq:ito_2d_cont}
+\end{align}
+and the jump part is
+\begin{equation}
+\mathrm{d}\Phi_t^{(J)}
+=
+\Big(
+\Phi(t,X_{t^-}+Z^y,V_{t^-}+Z^v)
+-
+\Phi(t,X_{t^-},V_{t^-})
+\Big)\,\mathrm{d}N_t.
+\label{eq:ito_2d_jump}
+\end{equation}
+\end{theorem*}
+
+Now, applying It\^{o}'s formula for two-dimensional jump--diffusions to the process $\Phi_t$.
+
+\paragraph{Step 1: derivatives of $\Phi(t,x,v)$.}
+For $\Phi(t,x,v)=\exp(A(\tau;u)+B(\tau;u)v+iux)$ with $\tau=T-t$, the spatial derivatives are
+\[
+\frac{\partial \Phi}{\partial x}=iu\,\Phi,
+\qquad
+\frac{\partial \Phi}{\partial v}=B(\tau;u)\,\Phi,
+\]
+\[
+\frac{\partial^2 \Phi}{\partial x^2}=-u^2\,\Phi,
+\qquad
+\frac{\partial^2 \Phi}{\partial v^2}=B(\tau;u)^2\,\Phi,
+\qquad
+\frac{\partial^2 \Phi}{\partial x\,\partial v}=iu\,B(\tau;u)\,\Phi.
+\]
+The time derivative must account for $\tau=T-t$:
+\[
+\frac{\partial \Phi}{\partial t}
+=
+\Phi\left(
+\frac{\partial}{\partial t}\big(A(\tau;u)+B(\tau;u)v\big)
+\right)
+=
+\Phi\left(
+-A_\tau(\tau;u)-B_\tau(\tau;u)\,v
+\right),
+\]
+where $A_\tau(\tau;u):=\partial A(\tau;u)/\partial \tau$ and $B_\tau(\tau;u):=\partial B(\tau;u)/\partial \tau$.
+
+\paragraph{Step 2: dynamics and quadratic variations.}
+Under the futures price numeraire, split each state variable into its continuous and jump parts:
+\begin{align}
+\mathrm{d}X_t &= \mathrm{d}X_t^{(c)} + Z^y\,\mathrm{d}N_t,
+&
+\mathrm{d}X_t^{(c)}
+&=
+\left(-\frac12 V_t-\lambda\kappa_F\right)\mathrm{d}t
++
+\sqrt{V_t}\,\mathrm{d}W_{1t},
+\\
+\mathrm{d}V_t &= \mathrm{d}V_t^{(c)} + Z^v\,\mathrm{d}N_t,
+&
+\mathrm{d}V_t^{(c)}
+&=
+\kappa(\theta-V_t)\mathrm{d}t
++
+\sigma_v\sqrt{V_t}\,\mathrm{d}W_{2t},
+\end{align}
+with $\mathrm{corr}(\mathrm{d}W_{1t},\mathrm{d}W_{2t})=\rho$.
+The \emph{continuous} quadratic covariations are
+\[
+(\mathrm{d}X_t^{(c)})^2 = V_t\,\mathrm{d}t,
+\qquad
+(\mathrm{d}V_t^{(c)})^2 = \sigma_v^2 V_t\,\mathrm{d}t,
+\qquad
+\mathrm{d}X_t^{(c)}\,\mathrm{d}V_t^{(c)} = \rho\sigma_v V_t\,\mathrm{d}t.
+\]
+
+\paragraph{Step 3: continuous part of $\mathrm{d}\Phi_t$.}
+Substituting the derivatives into \eqref{eq:ito_2d_cont} and using the quadratic variations yields
+\begin{align}
+\mathrm{d}\Phi_t^{(c)}
+&=
+\Phi_t\Bigg\{
+\Big[
+-A_\tau(\tau;u)-B_\tau(\tau;u)V_t
++iu\Big(-\tfrac12V_t-\lambda\kappa_F\Big)
++B(\tau;u)\kappa(\theta-V_t)
+\nonumber\\
+&\qquad\qquad
+-\tfrac12u^2V_t
++\tfrac12\sigma_v^2 B(\tau;u)^2 V_t
++\rho\sigma_v iu\,B(\tau;u)V_t
+\Big]\mathrm{d}t
+\nonumber\\
+&\qquad\qquad
++iu\sqrt{V_t}\,\mathrm{d}W_{1t}
++\sigma_v B(\tau;u)\sqrt{V_t}\,\mathrm{d}W_{2t}
+\Bigg\}.
+\label{eq:dPhi_cont_final}
+\end{align}
+
+\paragraph{Step 4: jump part of $\mathrm{d}\Phi_t$.}
+At a jump time, $(X_t,V_t)$ moves from $(X_{t^-},V_{t^-})$ to $(X_{t^-}+Z^y,V_{t^-}+Z^v)$, so
+\begin{align}
+\Phi(t,X_{t^-}+Z^y,V_{t^-}+Z^v)-\Phi(t,X_{t^-},V_{t^-})
+&=
+\Phi_{t^-}\left(e^{iuZ^y+B(\tau;u)Z^v}-1\right),
+\end{align}
+and therefore
+\begin{equation}
+\mathrm{d}\Phi_t^{(J)}
+=
+\Phi_{t^-}\left(e^{iuZ^y+B(\tau;u)Z^v}-1\right)\mathrm{d}N_t.
+\label{eq:dPhi_jump_final}
+\end{equation}
+
+% \paragraph{Step 5: full dynamics and predictable drift.}
+% Combining \eqref{eq:dPhi_cont_final} and \eqref{eq:dPhi_jump_final} gives
+% \begin{align}
+% \mathrm{d}\Phi_t
+% &=
+% \Phi_{t^-}\Big(
+% \widetilde{\mathcal{D}}_t\,\mathrm{d}t
+% +
+% iu\sqrt{V_t}\,\mathrm{d}W_{1t}
+% +
+% \sigma_v B(\tau;u)\sqrt{V_t}\,\mathrm{d}W_{2t}
+% \Big)
+% +
+% \Phi_{t^-}\left(e^{iuZ^y+B(\tau;u)Z^v}-1\right)\mathrm{d}N_t,
+% \label{eq:dPhi_full_correct}
+% \end{align}
+% where the \emph{predictable drift coefficient} (i.e.\ the $\mathrm{d}t$-coefficient obtained after taking
+% $\mathbb{E}[\mathrm{d}N_t\mid\mathcal{F}_{t^-}]=\lambda\,\mathrm{d}t$) is
+% \begin{align}
+% \widetilde{\mathcal{D}}_t
+% &=
+% -A_\tau(\tau;u)-B_\tau(\tau;u)V_t
+% +\kappa(\theta-V_t)B(\tau;u)
+% -\frac12(u^2+iu)V_t
+% +\frac12\sigma_v^2 B(\tau;u)^2V_t
+% \nonumber\\
+% &\quad
+% +\rho\sigma_v iu\,B(\tau;u)V_t
+% -iu\lambda\kappa_F
+% +\lambda\Big(M(u,B(\tau;u))-1\Big),
+% \label{eq:drift_with_A_B_derivs}
+% \end{align}
+% with the jump transform
+% \begin{equation}
+% M(u,B):=\mathbb{E}\!\left[e^{iuZ^y+BZ^v}\right].
+% \label{eq:jump_transform_def}
+% \end{equation}
+
+\paragraph{Step 5: full dynamics and predictable drift.}
+Combining \eqref{eq:dPhi_cont_final} and \eqref{eq:dPhi_jump_final}, it is convenient to rewrite the
+jump term using the \emph{compensated Poisson process}
+\[
+\widetilde{N}_t := N_t-\lambda t,
+\qquad\text{so that}\qquad
+\mathrm{d}N_t = \mathrm{d}\widetilde{N}_t + \lambda\,\mathrm{d}t,
+\]
+and $\mathbb{E}[\mathrm{d}\widetilde{N}_t\mid\mathcal{F}_{t^-}]=0$. Substituting this decomposition
+into the jump contribution yields the semimartingale dynamics
+\begin{align}
+\mathrm{d}\Phi_t
+&=
+\Phi_{t^-}\Big(
+\widetilde{\mathcal{D}}_t\,\mathrm{d}t
++
+iu\sqrt{V_t}\,\mathrm{d}W_{1t}
++
+\sigma_v B(\tau;u)\sqrt{V_t}\,\mathrm{d}W_{2t}
+\Big)
++
+\Phi_{t^-}\left(e^{iuZ^y+B(\tau;u)Z^v}-1\right)\mathrm{d}\widetilde{N}_t,
+\label{eq:dPhi_full_comp}
+\end{align}
+where the \emph{predictable drift coefficient} $\widetilde{\mathcal{D}}_t$ is
+\begin{align}
+\widetilde{\mathcal{D}}_t
+&=
+-A_\tau(\tau;u)-B_\tau(\tau;u)V_t
++\kappa(\theta-V_t)B(\tau;u)
+-\frac12(u^2+iu)V_t
++\frac12\sigma_v^2 B(\tau;u)^2V_t
+\nonumber\\
+&\quad
++\rho\sigma_v iu\,B(\tau;u)V_t
+-iu\lambda\kappa_F
++\lambda\Big(M(u,B(\tau;u))-1\Big),
+\label{eq:drift_with_A_B_derivs_comp}
+\end{align}
+with the \emph{jump transform}
+\begin{equation}
+M(u,B):=\mathbb{E}\!\left[e^{iuZ^y+BZ^v}\right].
+\label{eq:jump_transform_def}
+\end{equation}
+Equation \eqref{eq:dPhi_full_comp} separates $\mathrm{d}\Phi_t$ into a predictable drift term, a
+continuous local martingale part driven by $(W_{1t},W_{2t})$, and a purely discontinuous martingale
+part driven by the compensated jump process $\widetilde{N}_t$.
+
+\paragraph{Step 6: drift cancellation and Riccati equations.}
+Requiring $(\Phi_t)$ to be a martingale implies $\widetilde{\mathcal{D}}_t\equiv 0$ for all $t$ and
+all states. Since \eqref{eq:drift_wixth_A_B_derivs_comp} is affine in $V_t$, we set separately the
+coefficient of $V_t$ and the constant term to zero. Some algebra yields the \emph{Riccati system}
+% \begin{align}
+\begin{empheq}[box=\fbox]{align}
+B_\tau(\tau;u)
+&=
+\frac{1}{2}\sigma_v^2 B(\tau;u)^2
++\big(\rho\sigma_v iu-\kappa\big)B(\tau;u)
+-\frac{1}{2}\big(u^2+iu\big),
+\qquad
+B(0;u)=0,
+\label{eq:B_riccati_correct}
+\\[4pt]
+A_\tau(\tau;u)
+&=
+\kappa\theta\,B(\tau;u)
++\lambda\Big(M(u,B(\tau;u))-1-iu\kappa_F\Big),
+\qquad
+A(0;u)=0.
+\label{eq:A_riccati_correct}
+\end{empheq}
+% \end{align}
+Solving \eqref{eq:B_riccati_correct}--\eqref{eq:A_riccati_correct} yields the conditional
+characteristic function
+\[
+\phi(u;t,T)=\mathbb{E}\!\left[e^{iuX_T}\mid X_t,V_t\right]
+=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big),
+\qquad \tau=T-t.
+\]
+
+\paragraph{Step 7: closed form of the jump transform} Under \eqref{eq:Zv_exp}--\eqref{eq:Zy_condnorm}, conditional on $Z^v=z$,
+\begin{equation}
+\mathbb{E}\!\left[e^{i u Z^y}\mid Z^v=z\right]
+=
+\exp\!\left(iu(\ell_y+\rho_j z) - \frac{1}{2}u^2\sigma_y^2\right).
+\end{equation}
+Thus,
+\begin{align}
+M(u,B)
+&=
+\mathbb{E}\!\left[
+\exp\!\left(iu(\ell_y+\rho_j Z^v) - \frac{1}{2}u^2\sigma_y^2\right)
+e^{B Z^v}
+\right]
+=
+\exp\!\left(iu\ell_y - \frac{1}{2}u^2\sigma_y^2\right)
+\mathbb{E}\!\left[e^{(B+i u\rho_j)Z^v}\right].
+\end{align}
+If $Z^v$ is exponential with mean $\ell_v$, then
+\begin{equation}
+\mathbb{E}\!\left[e^{(B+i u\rho_j)Z^v}\right]
+=
+\frac{1}{1-\ell_v(B+i u\rho_j)},
+\qquad
+\mathrm{Re}(B+i u\rho_j) < \frac{1}{\ell_v},
+\end{equation}
+so the jump transform is
+\begin{equation}
+\boxed{M(u,B)
+=
+\exp\!\left(iu\ell_y - \frac{1}{2}u^2\sigma_y^2\right)\,
+\frac{1}{1-\ell_v(B+i u\rho_j)}.}
+\label{eq:M_closed}
+\end{equation}
+
+\subsection{Solving the Riccati system and the final characteristic function}\label{subsec:charfunc}
+
+This subsection solves the Riccati system \eqref{eq:B_riccati_correct}--\eqref{eq:A_riccati_correct}
+and collects a semi-closed-form representation of the conditional characteristic function
+\[
+\phi(u;t,T)=\mathbb{E}\!\left[e^{iuX_T}\mid X_t,V_t\right]
+=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big),
+\qquad \tau:=T-t,
+\].
+
+\paragraph{Closed-form solution for $B(\tau;u)$.}
+The Riccati equation for $B(\tau;u)$,
+\[
+B_\tau
+=
+\frac{1}{2}\sigma_v^2 B^2
++\big(\rho\sigma_v i u-\kappa\big)B
+-\frac{1}{2}\big(u^2+i u\big),
+\qquad B(0;u)=0,
+\]
+is identical to the diffusion (Heston) Riccati equation, because jumps enter only the $A$-equation in
+\eqref{eq:A_riccati_correct}. Hence $B$ admits the standard Heston closed form \citep{Heston1993}.
+Define, for each complex $u\in\mathbb{C}$,
+\begin{align}
+d(u) &:= \sqrt{\big(\kappa-\rho\sigma_v i u\big)^2 + \sigma_v^2\big(u^2+i u\big)}, \label{eq:d_def}\\
+g(u) &:= \frac{\kappa-\rho\sigma_v i u - d(u)}{\kappa-\rho\sigma_v i u + d(u)}, \label{eq:g_def}
+\end{align}
+where the square-root branch is chosen such that $\Re(d(u))>0$. This branch choice is important for
+numerical stability: it ensures $e^{-d(u)\tau}$ decays as $\tau$ increases and prevents spurious
+explosions from an incorrect branch selection.
+
+With \eqref{eq:d_def}--\eqref{eq:g_def}, the closed-form solution is
+\begin{equation}
+B(\tau;u)
+=
+\frac{\kappa-\rho\sigma_v i u - d(u)}{\sigma_v^2}\,
+\frac{1-e^{-d(u)\tau}}{1-g(u)e^{-d(u)\tau}}.
+\label{eq:B_closed}
+\end{equation}.
+Given $B(\tau;u)$, the function $A(\tau;u)$ solves
+\[
+A_\tau(\tau;u)
+=
+\kappa\theta\,B(\tau;u)
++\lambda\Big(M(u,B(\tau;u))-1-iu\kappa_F\Big),
+\qquad A(0;u)=0.
+\]
+It is convenient to decompose $A$ into its diffusion and jump contributions,
+\begin{equation}
+A(\tau;u)=A_{\mathrm{diff}}(\tau;u)+A_{\mathrm{jump}}(\tau;u),
+\label{eq:A_decomp}
+\end{equation}
+where $A_{\mathrm{diff}}$ collects the terms that remain when $\lambda=0$.
+
+\paragraph{Closed-form diffusion component $A_{\mathrm{diff}}(\tau;u)$.}
+Using \eqref{eq:B_closed},
+the diffusion component has the standard closed form \citep{Heston1993}
+\begin{equation}
+A_{\mathrm{diff}}(\tau;u)
+=
+\frac{\kappa\theta}{\sigma_v^2}
+\left[
+\big(\kappa-\rho\sigma_v i u - d(u)\big)\tau
+-
+2\log\!\left(\frac{1-g(u)e^{-d(u)\tau}}{1-g(u)}\right)
+\right].
+\label{eq:A_diff_closed}
+\end{equation}.
+
+\paragraph{Jump component $A_{\mathrm{jump}}(\tau;u)$.}
+The jump contribution in \eqref{eq:A_riccati_correct} depends on $\tau$ only through $B(\tau;u)$.
+Since $A(0;u)=0$, integrating the $A$-ODE over $[0,\tau]$ yields directly
+\begin{equation}
+A_{\mathrm{jump}}(\tau;u)
+=
+\lambda\int_{0}^{\tau}
+\left(
+M\!\big(u,B(s;u)\big)\;-\;1\;-\; i u\,\kappa_F
+\right)\,ds,
+\label{eq:A_jump_integral}
+\end{equation}
+where
+\[
+M(u,B):=\mathbb{E}\!\left[e^{iuZ^y + BZ^v}\right],
+\qquad
+\kappa_F:=\mathbb{E}\!\left[e^{Z^y}-1\right].
+\]
+In general, because $M(u,B(s;u))$ is a nonlinear function of $B(s;u)$, this integral does not simplify to an elementary closed form and is
+computed numerically.
+
+Summarizing:
+\begin{tcolorbox}[title={Characteristic function (SVCJ under the futures numeraire)},
+colback=gray!3,colframe=black!30,boxrule=0.4pt,arc=2mm,
+left=1em,right=1em,top=0.8em,bottom=0.8em,fonttitle=\bfseries]
+
+Let $\tau:=T-t$ and $X_t=\log F_t$. The conditional characteristic function is exponential-affine:
+\begin{equation}
+\phi(u;t,T):=\mathbb{E}\!\left[e^{iuX_T}\mid X_t,V_t\right]
+=
+\exp\!\big(A(\tau;u)+B(\tau;u)V_t+iuX_t\big).
+\end{equation}
+
+Define
+\begin{align*}
+d(u) &:= \sqrt{\big(\kappa-\rho\sigma_v iu\big)^2+\sigma_v^2\big(u^2+iu\big)},\\
+g(u) &:= \frac{\kappa-\rho\sigma_v iu-d(u)}{\kappa-\rho\sigma_v iu+d(u)},
+\qquad \Re(d(u))>0.
+\end{align*}
+Then
+\begin{equation}
+B(\tau;u)
+=
+\frac{\kappa-\rho\sigma_v iu-d(u)}{\sigma_v^2}\,
+\frac{1-e^{-d(u)\tau}}{1-g(u)e^{-d(u)\tau}}.
+\end{equation}
+
+$A(\tau;u)=A_{\mathrm{diff}}(\tau;u)+A_{\mathrm{jump}}(\tau;u)$, with
+\begin{align}
+A_{\mathrm{diff}}(\tau;u)
+&=
+\frac{\kappa\theta}{\sigma_v^2}
+\left[
+\big(\kappa-\rho\sigma_v iu-d(u)\big)\tau
+-2\log\!\left(\frac{1-g(u)e^{-d(u)\tau}}{1-g(u)}\right)
+\right],
+\label{eq:cf_Adiff_box}\\[4pt]
+A_{\mathrm{jump}}(\tau;u)
+&=
+\lambda\int_0^\tau\Big(M\!\big(u,B(s;u)\big)-1-iu\kappa_F\Big)\,\mathrm{d}s,
+\label{eq:cf_Ajump_box}
+\end{align}
+where,
+\begin{align}
+M(u,B)
+&:=\mathbb{E}\!\left[e^{iuZ^y+BZ^v}\right]
+=
+\exp\!\left(iu\ell_y-\frac12u^2\sigma_y^2\right)\,
+\frac{1}{1-\ell_v\big(B+iu\rho_j\big)},
+\label{eq:M_box_closed}\\[4pt]
+\kappa_F
+&:=\mathbb{E}\!\left[e^{Z^y}-1\right]
+=
+\exp\!\left(\ell_y+\frac12\sigma_y^2\right)\,
+\frac{1}{1-\ell_v\rho_j}
+-1.
+\label{eq:kappaF_box_closed}
+\end{align}
+
+\end{tcolorbox}
+
+The characteristic functions for the Black and Heston models under the futures price numeraire are derived in Appendix B.
+
+
+\section{Pricing inverse options under the futures numeraire}
+\label{sec:pricing_inverse}
+
+\subsection{Inverse option payoffs and change of numeraire}
+\label{subsec:inverse_payoffs}
+
+Let $K>0$ be the strike in USD per coin. The standard (``regular'') USD-settled European payoffs are
+\begin{equation}
+u_{\text{call}}(F_T) = (F_T-K)^+,\qquad
+u_{\text{put}}(F_T)  = (K-F_T)^+.
+\end{equation}
+Inverse options on Deribit are quoted and settled in units of the underlying coin; they correspond to dividing the USD payoff by the terminal underlying price. Thus the inverse payoffs are \citep{LucicSepp2024}
+\begin{equation}
+r_{\text{call}}(F_T) = \frac{(F_T-K)^+}{F_T},\qquad
+r_{\text{put}}(F_T)  = \frac{(K-F_T)^+}{F_T}.
+\label{eq:inverse_payoffs}
+\end{equation}
+
+The key observation (used throughout \citet{LucicSepp2024}) is that inverse option valuation is most naturally expressed under a numeraire equal to the underlying forward/futures price. Let $F_t$ be the numeraire and let $\mathbb{Q}^{F}$ be the corresponding martingale measure. Then for any USD payoff $u(F_T)$, the time-$t$ USD price satisfies the standard change-of-numeraire identity \citep{GemanElKarouiRochet1995,LucicSepp2024}
+\begin{equation}
+V_t^{\mathrm{USD}}
+=
+F_t\,
+\mathbb{E}^{\mathbb{Q}^{F}}\!\left[\frac{u(F_T)}{F_T}\,\bigg|\,\mathcal{F}_t\right].
+\label{eq:numeraire_identity}
+\end{equation}
+Therefore the \emph{coin}-denominated price of the inverse payoff $r(F_T)=u(F_T)/F_T$ is simply
+\begin{equation}
+\boxed{
+V_t^{\mathrm{coin}}
+=
+\mathbb{E}^{\mathbb{Q}^{F}}\!\left[r(F_T)\mid \mathcal{F}_t\right]
+=
+\frac{V_t^{\mathrm{USD}}}{F_t}.}
+\label{eq:inverse_price_relation}
+\end{equation}
+In words: to price an inverse option in coin units, we can price the corresponding regular USD option and divide by the current underlying futures price.
+
+\subsection{Fourier pricing of the regular futures call option}
+\label{subsec:fft_pricing}
+
+We price the regular USD option using the characteristic function derived in \ref{subsec:charfunc} and a Fourier method. A computationally convenient approach is the FFT-based method of \citet{CarrMadan1999}. Let $\tau=T-t$ be the time to maturity and $k=\log K$ be the log-strike. Let $C(K)$ denote the regular call price in USD. Under some regularity conditions, \citet{CarrMadan1999} show that
+\begin{equation}
+C(K)
+=
+\frac{e^{-\alpha k}}{\pi}
+\int_{0}^{\infty}
+\mathrm{Re}\!\left(
+e^{-i u k}\,
+\Psi(u)
+\right)\,\mathrm{d}u,
+\label{eq:carr_madan_call}
+\end{equation}
+where
+\begin{equation}
+\Psi(u)
+=
+\frac{\phi\!\left(u-(\alpha+1)i; t,T\right)}
+{\alpha^2+\alpha-u^2 + i(2\alpha+1)u},
+\label{eq:carr_madan_psi}
+\end{equation}
+and $\phi(\cdot;t,T)$ is the characteristic function. In practice, the call price can be evaluated using FFT on a grid of strikes \citep{CarrMadan1999}. 
+
+The Carr--Madan method prices options by transforming the call price as a function of log-strike
+$k=\log K$ into the frequency domain, where it can be expressed directly in terms of the
+characteristic function of $X_T=\log F_T$. Because $C(e^k)$ typically does not decay fast enough for a
+Fourier transform to exist, we introduce the exponentially damped call
+\[
+\widetilde C(k):=e^{\alpha k}C(e^k),\qquad \alpha>0,
+\]
+chosen so that $\widetilde C\in L^2(\mathbb{R})$.
+
+We then take the Fourier transform of $\widetilde C$ (with respect to $k$),
+\begin{equation}
+\widehat{\widetilde C}(u)
+:=
+\int_{-\infty}^{\infty} e^{iuk}\,\widetilde C(k)\,\mathrm{d}k,
+\qquad u\in\mathbb{R}.
+\label{eq:FT_damped_call}
+\end{equation}
+Starting from $C(e^k)=\mathbb{E}[(F_T-e^k)^+\mid\mathcal F_t]$ and substituting into
+\eqref{eq:FT_damped_call}, one obtains an expression of the form
+\[
+\widehat{\widetilde C}(u)
+=
+\mathbb{E}\!\left[\int_{-\infty}^{\infty} e^{iuk}e^{\alpha k}(F_T-e^k)^+\,\mathrm{d}k\;\Big|\;\mathcal F_t\right].
+\]
+Under the same integrability conditions that justify the damping, the order of expectation and
+integration can be exchanged. The resulting inner integral can be evaluated in closed form and
+reduces the transform $\widehat{\widetilde C}(u)$ to a rational factor times an exponential moment
+of $X_T$, which is precisely the characteristic function evaluated at a complex argument. This yields
+the closed-form representation
+\begin{equation}
+\widehat{\widetilde C}(u)=\Psi(u),
+\label{eq:FT_equals_Psi}
+\end{equation}
+where $\Psi(u)$ is given in \eqref{eq:carr_madan_psi}.
+
+Finally, the damped call is recovered by the inverse Fourier transform,
+\begin{equation}
+\widetilde C(k)
+=
+\frac{1}{2\pi}\int_{-\infty}^{\infty} e^{-iuk}\,\widehat{\widetilde C}(u)\,\mathrm{d}u
+=
+\frac{1}{\pi}\int_{0}^{\infty}\mathrm{Re}\!\left(e^{-iuk}\Psi(u)\right)\mathrm{d}u,
+\label{eq:IFT_damped_call}
+\end{equation}
+and undoing the damping gives the desired call price
+\[
+C(K)=C(e^k)=e^{-\alpha k}\widetilde C(k),
+\]
+which is \eqref{eq:carr_madan_call}.
+
+In practice, the integral in \eqref{eq:carr_madan_call} is approximated on an evenly spaced frequency
+grid $u_j=j\Delta u$, $j=0,\dots,N-1$. Using the trapezoidal rule, the inverse transform becomes a
+discrete Fourier transform mapping the sampled values $\Psi(u_j)$ to call prices on an evenly spaced
+log-strike grid $k_m = k_0 + m\Delta k$, $m=0,\dots,N-1$, with the grid spacings linked by
+$\Delta k\,\Delta u = 2\pi/N$. This is precisely the structure computed efficiently by the FFT,
+allowing simultaneous pricing of a large set of strikes in $O(N\log N)$ time.
+
+For a more detailed discussion of the Carr-Madan procedure, see Appendix A. The actual implementation of the Carr-Madan FFT pricer is available on \href{https://github.com/znmahbub/SVCJ-Deribit-Inverse-Options-Pricer/blob/main/src/inverse_fft_pricer.py}{GitHub}.
+
+\subsection{Inverse call and put option price}
+\label{subsec:inverse_price}
+
+Given $C(K)$ in USD units, the inverse call option price in coin unit is
+\begin{equation}
+C^{\mathrm{coin}}(K) = \frac{C(K)}{F_t},
+\label{eq:inverse_call_put_prices}
+\end{equation}
+which is the direct application of \eqref{eq:inverse_price_relation}.
+
+The put inverse option on the futures can be calculated using the following put--call parity for inverse options\footnote{Assuming zero discounting, following \citep{LucicSepp2024}}:
+
+\begin{theorem*}[Put--call parity for inverse options]
+Let $F_t$ be the time-$t$ price of a futures contract maturing at $T$, and let $C_t(K,T)$ and
+$P_t(K,T)$ denote the time-$t$ prices of European call and put options with strike $K$ and maturity
+$T$ written on this futures. Define the \emph{futures-numeraire prices}
+\[
+\widehat C_t(K,T):=\frac{C_t(K,T)}{F_t},
+\qquad
+\widehat P_t(K,T):=\frac{P_t(K,T)}{F_t}.
+\]
+Then, under the pricing measure associated with the futures numeraire, the following put--call parity holds:
+\begin{equation}
+\boxed{
+\widehat C_t(K,T)-\widehat P_t(K,T)=1-\frac{K}{F_t}.}
+\label{eq:pcp_futures_numeraire}
+\end{equation}
+\end{theorem*}
+For the proof of the above theorem, see Appendix C.
+
+\section{Model deltas and net deltas}
+\label{sec:deltas}
+
+Inverse option hedging requires careful attention to what ``delta'' means when the option is quoted in coin units. The main takeaway from \citet{LucicSepp2024} is that inverse-option hedging requires a \emph{premium adjustment}: the hedging ratio must account for the fact that the option price is itself denominated in coin.
+
+\subsection{Regular delta under SVCJ}
+\label{subsec:regular_delta}
+
+Let $C(K)$ denote the regular USD call price. The regular futures delta is
+\begin{equation}
+\Delta^{\mathrm{reg}}_t := \frac{\partial C(K)}{\partial F_t}.
+\end{equation}
+For numerical work, $\Delta^{\mathrm{reg}}_t$ can be computed by differentiating the Fourier representation \eqref{eq:carr_madan_call} with respect to $F_t$ (noting $X_t=\log F_t$ enters the characteristic function affinely), or equivalently via a probability representation (common in affine models):
+\begin{equation}
+C(K) = F_t \Pi_1 - K \Pi_2,
+\end{equation}
+where $\Pi_2$ is the risk-neutral probability of finishing in the money and $\Pi_1$ is the corresponding probability under the ``share'' (or forward-numeraire) measure. Under standard regularity, this implies $\Delta^{\mathrm{reg}}_t=\Pi_1$.
+
+In affine models, $\Pi_1$ and $\Pi_2$ can be computed by Fourier inversion using the characteristic function $\phi$ \citep{GilPelaez1951, Heston1993}.
+
+% \subsection{Inverse delta and premium-adjusted net delta}
+% \label{subsec:net_delta}
+
+% The inverse call price in coin units is $C^{\mathrm{coin}}(K)=C(K)/F_t$ from \eqref{eq:inverse_call_put_prices}. Its sensitivity with respect to $F_t$ is
+% \begin{equation}
+% \frac{\partial C^{\mathrm{coin}}(K)}{\partial F_t}
+% =
+% \frac{1}{F_t}\left(\Delta^{\mathrm{reg}}_t - \frac{C(K)}{F_t}\right)
+% =
+% \frac{1}{F_t}\left(\Delta^{\mathrm{reg}}_t - C^{\mathrm{coin}}(K)\right).
+% \label{eq:inverse_delta_coin}
+% \end{equation}
+
+% However, \citet{LucicSepp2024} emphasize that the \emph{hedge ratio} for inverse options (when hedging with inverse futures) is the \emph{premium-adjusted} or \emph{net delta}, defined model-independently by differentiating the numeraire relation $V^{\mathrm{USD}}_t = F_t V^{\mathrm{coin}}_t$:
+% \begin{equation}
+% \boxed{
+% \Delta^{\mathrm{net}}_t
+% :=
+% \Delta^{\mathrm{reg}}_t - \frac{C(K)}{F_t}
+% =
+% \Delta^{\mathrm{reg}}_t - C^{\mathrm{coin}}(K).}
+% \label{eq:net_delta}
+% \end{equation}
+% The same logic applies to puts, with $C$ replaced by $P$.
+
+\subsection{Inverse delta and premium-adjusted net delta}
+\label{subsec:net_delta}
+
+Let $C_t(K)$ denote the \emph{regular} call price in USD, and define the \emph{inverse} (coin-denominated) price by the numeraire conversion
+\begin{equation}
+C^{\mathrm{coin}}_t(K) := \frac{C_t(K)}{F_t},
+\label{eq:coin_price_def}
+\end{equation}
+where $F_t$ is the term-futures price in USD per coin.
+
+\paragraph{Inverse delta (sensitivity of the coin price).}
+Differentiate \eqref{eq:coin_price_def} with respect to $F_t$.
+Writing the regular (USD) delta as $\Delta_t^{\mathrm{reg}} := \partial C_t(K)/\partial F_t$, the
+chain rule gives
+\begin{equation}
+\frac{\partial C^{\mathrm{coin}}_t(K)}{\partial F_t}
+=
+\frac{1}{F_t}\Delta_t^{\mathrm{reg}}
+-\frac{C_t(K)}{F_t^2}
+=
+\frac{1}{F_t}\left(\Delta_t^{\mathrm{reg}}-\frac{C_t(K)}{F_t}\right)
+=
+\frac{1}{F_t}\left(\Delta_t^{\mathrm{reg}}-C_t^{\mathrm{coin}}(K)\right).
+\label{eq:inverse_delta_coin}
+\end{equation}
+Thus, the inverse delta is simply the usual delta rescaled by $1/F_t$, with an additional term
+reflecting that the coin price $C^{\mathrm{coin}}_t=C_t/F_t$ itself depends on $F_t$ through the
+numeraire conversion.
+
+\paragraph{Net (premium-adjusted) delta as the hedge ratio.}
+For hedging inverse options with inverse futures/perpetuals, \citet{LucicSepp2024} emphasize that the
+economically relevant hedge ratio is the \emph{premium-adjusted} (or \emph{net}) delta, defined by
+differentiating the numeraire identity $C_t = F_t C_t^{\mathrm{coin}}$:
+\[
+\mathrm{d}C_t
+=
+C_t^{\mathrm{coin}}\,\mathrm{d}F_t
++
+F_t\,\mathrm{d}C_t^{\mathrm{coin}}.
+\]
+Approximating $\mathrm{d}C_t \approx \Delta_t^{\mathrm{reg}}\,\mathrm{d}F_t$ and rearranging yields
+\[
+F_t\,\mathrm{d}C_t^{\mathrm{coin}}
+\approx
+\left(\Delta_t^{\mathrm{reg}}-C_t^{\mathrm{coin}}\right)\mathrm{d}F_t,
+\]
+which shows that the bracketed quantity governs the exposure of the coin-denominated option value to
+moves in $F_t$. This motivates the definition
+\begin{equation}
+\boxed{
+\Delta_t^{\mathrm{net}}
+:=
+\Delta_t^{\mathrm{reg}}-\frac{C_t(K)}{F_t}
+=
+\Delta_t^{\mathrm{reg}}-C_t^{\mathrm{coin}}(K).
+}
+\label{eq:net_delta}
+\end{equation}
+Combining \eqref{eq:inverse_delta_coin} and \eqref{eq:net_delta} makes the relationship explicit:
+\begin{equation}
+\frac{\partial C^{\mathrm{coin}}_t(K)}{\partial F_t}
+=
+\frac{1}{F_t}\,\Delta_t^{\mathrm{net}}.
+\label{eq:inverse_delta_net_relation}
+\end{equation}
+In words, the \emph{inverse delta} is the net delta scaled by $1/F_t$, while the \emph{net delta}
+itself is the premium-adjusted hedge ratio naturally associated with inverse-futures hedging.
+The same definitions apply to puts with $C$ replaced by $P$.
+
+
+\section{Hedging inverse options with perpetual futures and measuring hedging performance}
+\label{sec:hedging_perp}
+
+\subsection{Why hedge with the perpetual rather than the term future?}
+\label{subsec:perp_liquidity}
+
+On Deribit, the underlying of an option expiring at $T$ is the \emph{term} futures contract $F_t^{(T)}$ with the same settlement date \citep{LucicSepp2024}. Empirically, the perpetual futures market is typically more liquid than individual term futures. As a result, delta hedging is commonly implemented using the inverse perpetual future (``perp'') rather than the less liquid term future \citep{LucicSepp2024}.
+
+Let $F_t^{\perp}$ denote the (mark) price of the inverse perpetual future. Because $F_t^{(T)}$ and $F_t^{\perp}$ are not identical, and the deltas of an option on a term futures and a perpetual futures are not identical, this introduces \emph{basis risk} driven by funding/carry effects (discussed explicitly in \citet{LucicSepp2024}).
+
+\subsection{Perpetual-futures P\&L and delta-hedge sizing}
+\label{subsec:perp_pnl}
+
+\citet{LucicSepp2024} provide a convenient convention for computing the coin P\&L of an inverse perpetual futures position with fixed USD notional $N_{\mathrm{USD}}$. Over a small interval $[t,t+\delta t]$, the coin P\&L is
+\begin{equation}
+\mathrm{P\&L}^{\mathrm{coin}}(t,t+\delta t)
+=
+N_{\mathrm{USD}}
+\left(
+\frac{1}{F_t^{\perp}}-\frac{1}{F_{t+\delta t}^{\perp}}
+\right).
+\label{eq:perp_pnl_coin}
+\end{equation}
+This formula is the discrete-time building block for hedging simulations.
+
+Now consider a \emph{single} inverse option written on the term future $F_t^{(T)}$ with net delta $\Delta_t^{\mathrm{net}}$ computed with respect to the term futures price (via \eqref{eq:net_delta}). A natural hedge is to take an inverse perpetual position with USD notional
+\begin{equation}
+\boxed{
+N_{\mathrm{USD},t}
+=
+-\,F_t^{(T)}\,\Delta_t^{\mathrm{net}}.}
+\label{eq:hedge_notional}
+\end{equation}
+This is the single-contract specialization of the portfolio aggregation rule in \citet{LucicSepp2024}. Intuitively, multiplying $\Delta_t^{\mathrm{net}}$ (a coin-denominated hedge ratio) by $F_t^{(T)}$ converts it into USD notional exposure, which is exactly how inverse perpetual positions are parameterized in practice.
+
+\subsection{Dynamic delta-hedge P\&L and hedging performance metrics}
+\label{subsec:hedging_performance}
+
+Fix a hedging grid $t_0=t < t_1 < \dots < t_n=T$ (e.g., hourly or twice-daily). Consider the P\&L of a \emph{short} inverse option position (this is the standard backtesting convention in option risk-premia studies). Let the inverse option premium at inception be $V_{t_0}^{\mathrm{coin}}$ and the terminal inverse payoff be $r(F_T^{(T)})$ from \eqref{eq:inverse_payoffs}.
+
+At each hedging time $t_i$, we compute $\Delta_{t_i}^{\mathrm{net}}$ and set the perpetual hedge notional to $N_{\mathrm{USD},t_i}$ as in \eqref{eq:hedge_notional}. Ignoring funding and transaction costs for the moment, the hedged coin P\&L over $[t_i,t_{i+1}]$ from the perpetual is
+\begin{equation}
+\mathrm{P\&L}^{\mathrm{coin}}_{\perp}(t_i,t_{i+1})
+=
+N_{\mathrm{USD},t_i}
+\left(
+\frac{1}{F_{t_i}^{\perp}}-\frac{1}{F_{t_{i+1}}^{\perp}}
+\right).
+\end{equation}
+The total hedged P\&L (coin-denominated) for the short option is then
+\begin{equation}
+\boxed{
+\mathrm{P\&L}^{\mathrm{hedged}}
+=
+V_{t_0}^{\mathrm{coin}}
+-\; r(F_T^{(T)})
++\sum_{i=0}^{n-1}\mathrm{P\&L}^{\mathrm{coin}}_{\perp}(t_i,t_{i+1})
+\;-\;\text{Transaction Costs}
+\;-\;\text{Funding}.}
+\label{eq:hedged_pnl_definition}
+\end{equation}
+
+\paragraph{Hedging performance evaluation.}
+Given a collection of inverse option contracts (different strikes and maturities) over an out-of-sample period, we will evaluate hedging performance using:
+\begin{itemize}[leftmargin=2em]
+\item the mean and standard deviation of $\mathrm{P\&L}^{\mathrm{hedged}}$;
+\item the root mean squared hedging error (RMSHE), i.e.\ $\sqrt{\mathbb{E}[(\mathrm{P\&L}^{\mathrm{hedged}})^2]}$;
+\item tail risk measures (e.g.\ 5\% quantile / expected shortfall) of hedged P\&L;
+\item comparisons across models (SVCJ vs benchmark models in later chapters) using the same hedging grid and cost assumptions.
+\end{itemize}
+This links the statistical fit of the model (pricing errors) to its trading-relevant implications (hedging errors).
+
+
+
+% ============================================================
+% Chapter 3 — Data and Calibration
+% ============================================================
+
+\chapter{Data and Calibration Results}\label{ch:data_calibration}
+
+This chapter describes the empirical dataset used in the study, the preprocessing and liquidity filters applied to Deribit option quotes, the calibration methodology employed to fit the Black, Heston, and SVCJ models to observed inverse option prices, and the calibration results.
+
+% ------------------------------------------------------------
+\section{Dataset description}\label{sec:data_description}
+
+\subsection{Data source and collection procedure}\label{subsec:data_collection}
+
+All market data are sourced from the Deribit public API\footnote{\href{https://docs.deribit.com/}{Deribit API documentation}}. The dataset is constructed from timestamped snapshots of the BTC and ETH option chains, augmented with a snapshot of perpetual futures quotes. The data collection period is from 30-12-2025 till 08-04-2026. 
+Option surface snapshots are collected roughly 4 times daily 6 hour intervals, giving a total of 388 snapshots. Each snapshot time is denoted by $t$, and the corresponding panel of options is used for cross-sectional calibration at that time.\footnote{The code used for collecting the data is available on \href{https://github.com/znmahbub/SVCJ-Deribit-Inverse-Options-Pricer/blob/main/src/collect_deribit_snapshot.py}{GitHub}}
+
+\subsection{Option snapshot fields}\label{subsec:option_fields}
+
+Each option snapshot is stored as a CSV file\footnote{Available on \href{https://github.com/znmahbub/SVCJ-Deribit-Inverse-Options-Pricer/tree/main/data}{GitHub}}, with one row per listed option instrument. Table~\ref{tab:option_fields} lists the fields stored for each option. In particular, option prices are recorded in the quote convention used by Deribit for inverse options, i.e.\ premia are denominated in the underlying coin (BTC for BTC options, ETH for ETH options).
+
+\begin{longtable}{@{}p{0.30\textwidth}p{0.65\textwidth}@{}}
+\caption{Fields stored in the option snapshot dataset.}\label{tab:option_fields}\\
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{timestamp} &
+Snapshot timestamp (UTC), representing the observation time $t$. \\
+
+\texttt{currency} &
+Underlying currency (BTC or ETH). \\
+
+\texttt{instrument\_name} &
+Deribit instrument identifier (unique option name). \\
+
+\texttt{option\_type} &
+Option type: \texttt{call} or \texttt{put}. \\
+
+\texttt{strike} &
+Strike $K$ in USD per coin. \\
+
+\texttt{expiry\_datetime} &
+Expiration datetime (UTC). \\
+
+\texttt{time\_to\_maturity} &
+Time to maturity $T$ in years, computed at collection time. \\
+
+\texttt{bid\_price}, \texttt{ask\_price} &
+Best bid/ask option premia (coin-denominated). \\
+
+\texttt{mid\_price} &
+Mid premium (coin-denominated). If unavailable, computed as $(\texttt{bid}+\texttt{ask})/2$. \\
+
+\texttt{mark\_price} &
+Deribit mark price (coin-denominated). \\
+
+\texttt{bid\_ask\_spread} &
+$\texttt{ask\_price} - \texttt{bid\_price}$ (coin-denominated). \\
+
+\texttt{implied\_volatility} &
+Mark implied volatility (decimal), derived from Deribit \texttt{mark\_iv}. \\
+
+\texttt{delta}, \texttt{vega} &
+Option Greeks. \\
+
+\texttt{open\_interest} &
+Open interest (contract units as reported by Deribit). \\
+
+\texttt{volume}, \texttt{volume\_usd} &
+Trading volume as reported by Deribit (native units and USD). \\
+
+\texttt{index\_price} &
+Spot index level (USD per coin). \\
+
+\texttt{underlying} &
+Underlying level (typically a futures/synthetic forward). \\
+
+\texttt{underlying\_name} &
+Underlying identifier associated with \texttt{underlying}. If equal to \texttt{index\_price}, the underlying is the spot index; otherwise it typically refers to a dated future or a synthetic forward. \\
+
+\texttt{futures\_price} &
+Forward/futures proxy used in calibration. This field is populated when \texttt{underlying\_name} is not \texttt{index\_price}; otherwise it may be missing. \\
+
+\texttt{futures\_instrument\_name} &
+Instrument name associated with \texttt{futures\_price} (when available). \\
+
+\end{longtable}
+
+\subsection{Perpetual futures snapshot fields}\label{subsec:perp_fields}
+
+In addition to the option surface, a separate CSV file\footnote{Also available on \href{https://github.com/znmahbub/SVCJ-Deribit-Inverse-Options-Pricer/tree/main/data}{GitHub}} stores a snapshot of perpetual futures quotes, primarily intended for subsequent hedging and performance evaluation. Table~\ref{tab:perp_fields} lists the stored fields.
+
+\begin{table}[H]
+\centering
+\caption{Fields stored in the perpetual futures snapshot dataset.}\label{tab:perp_fields}
+\begin{tabular}{@{}p{0.30\textwidth}p{0.65\textwidth}@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+\texttt{obs\_datetime} & Observation time (UTC). \\
+\texttt{coin} & Underlying coin: BTC or ETH. \\
+\texttt{perp\_futures\_mark\_price} & Perpetual futures mark price (USD per coin). \\
+\texttt{perp\_futures\_best\_bid} & Best bid price (USD per coin). \\
+\texttt{perp\_futures\_best\_ask} & Best ask price (USD per coin). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pre-calibration cleaning and liquidity filters}\label{subsec:data_filters}
+
+Raw snapshots contain stale quotes, wide markets, and instruments with negligible trading activity. Since calibration is performed by matching model prices to observed mid quotes, the dataset is filtered to retain reasonably liquid instruments. The filtering procedure applied to each snapshot consists of the following steps:
+
+\begin{enumerate}[leftmargin=1.8em]
+    \item \textbf{Basic validation.} Ensure all required fields are present (currency, option type, strike, maturity, bid/ask quotes, underlying price, vega, open interest, and expiry identifier).
+    \item \textbf{Maturity filtering.} Retain only options with strictly positive time-to-maturity and enforce a minimum maturity threshold:
+    \[
+    T \ge \frac{1}{365} \text{ years}.
+    \]
+    \item \textbf{Quote quality.} Require strictly positive bid and ask quotes, and enforce $\texttt{ask\_price} \ge \texttt{bid\_price}$.
+    \item \textbf{Activity thresholds.} Enforce minimum levels of open interest and vega. The default values are specified below:
+    \[
+    \texttt{open\_interest} \ge 1, \qquad \texttt{vega} \ge 0.
+    \]
+    \item \textbf{Relative spread filter.} Define the clean mid price and relative spread as
+    \[
+    P^{mid} \;=\; \tfrac12(\texttt{bid\_price}+\texttt{ask\_price}), \qquad
+    \texttt{rel\_spread} \;=\; \frac{\texttt{ask\_price}-\texttt{bid\_price}}{P^{mid}},
+    \]
+    and impose the cutoff $\texttt{rel\_spread} \le 0.5$.
+    \item \textbf{Forward proxy and moneyness.} For each expiry bucket, define a forward proxy $F_0$ as the median \texttt{futures\_price} observed in that bucket (the observed futures price may vary slightly within each expiry bucket due to lags in obtaining the data), and compute moneyness as $K/F_0$. By default, keep options with
+    \[
+    0.5 \le \frac{K}{F_0} \le 2.0.
+    \]
+    \item \textbf{Instrument type.} Drop if not \texttt{call} or \texttt{put}.
+\end{enumerate}
+
+\subsection{EDA of the filtered calibration data}\label{subsec:exploratory_overview}
+
+Before turning to model calibration, it is useful to describe the structure of the filtered calibration sample. Table~\ref{tab:eda_summary} summarizes the sample by currency. BTC panels are somewhat denser than ETH panels: the median BTC snapshot contains 480.5 usable contracts, against 427.0 for ETH. The filtered sample is close to balanced between calls and puts for both assets, and the median moneyness in both markets is slightly above one, indicating that the retained contracts cluster around the underlying futures while still covering a broad range of in- and out-of-the-money strikes.
+
+\begin{table}[H]
+\centering
+\caption{Filtered pooled calibration sample by currency.}
+\label{tab:eda_summary}
+\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{5pt}
+
+\begin{tabular}{%
+>{\centering\arraybackslash}m{1.5cm}
+>{\centering\arraybackslash}m{1.5cm}
+>{\centering\arraybackslash}m{1.5cm}
+>{\centering\arraybackslash}m{1.2cm}
+>{\centering\arraybackslash}m{1.2cm}
+>{\centering\arraybackslash}m{1.6cm}
+>{\centering\arraybackslash}m{1.6cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+}
+\toprule
+Currency
+& Snapshots
+& Quotes
+& Calls
+& Puts
+& \makecell{Median\\options\\per\\snapshot}
+& \makecell{Median\\maturity\\(days)}
+& \makecell{Median\\$K/F_0$}
+& \makecell{Median\\relative\\spread} \\
+\midrule
+BTC & 388 & 191033 & 95682 & 95351 & 480.5 & 47.4 & 1.042 & 0.033 \\
+ETH & 388 & 164519 & 83738 & 80781 & 427.0 & 42.4 & 1.053 & 0.036 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:filtered_distribution} shows the maturity and moneyness distributions for the pooled filtered sample. Two features matter for model design. First, the option universe is heavily tilted toward short maturities, which is where skew and jump effects typically become more apparent, but still exhibits a meaningful right tail extending to roughly one year. Second, the moneyness distribution is centred near the futures, yet remains wide enough that any successful model must fit both the centre of the smile and the wings. This is precisely where the flexibility of stochastic volatility and jumps should matter most.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=1\textwidth]{images/exploratory_distributions.png}
+\caption{Distribution of filtered option quotes by maturity and moneyness.}
+\label{fig:filtered_distribution}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Calibration methodology}\label{sec:calibration_methodology}
+
+Model parameters are estimated via repeated cross-sectional calibration. At each snapshot time $t$, let $\{(K_i, T_i, F_{0,i}, P^{mkt}_i)\}_{i=1}^n$ denote the filtered set of option quotes, where $K_i$ is the strike, $T_i$ the time to maturity, $F_{0,i}$ the futures proxy, and $P^{mkt}_i$ the observed inverse option mid premium in coin units. For a given model with parameter vector $\theta$, the pricing engine produces model-implied inverse option prices $P^{model}_i(\theta)$ in the same units. The calibration objective is to choose $\hat{\theta}$ to minimize a weighted least-squares discrepancy between $P^{model}$ and $P^{mkt}$.
+
+The calibration is carried out separately for the Black, Heston, and SVCJ models. All models are priced under the futures price numeraire consistent with the Deribit inverse-quote convention, and calibration is performed in coin units to match observed market premia.
+
+Because calibration is repeated independently on a dense time series of snapshots, the raw cross-sectional objective may produce economically implausible parameter jumps from one snapshot to the next, especially when the model has many parameters that lead to similar prices. To reduce this effect, the implementation incorporates \emph{temporal smoothing}: when calibrating a snapshot at time $t$, the optimizer is encouraged to remain close to the parameter vector obtained at the previous snapshot via an $L_2$-type penalty.
+
+\subsection{Objective function, time smoothing and weighting}\label{subsec:objective_weights}
+
+Let $w_i \ge 0$ denote a weight assigned to quote $i$. The residual for quote $i$ is defined as
+\[
+r_i(\theta_t) \;=\; w_i\bigl(P^{model}_i(\theta_t) - P^{mkt}_i\bigr),
+\]
+and the estimator solves the weighted least-squares problem
+\begin{equation}\label{eq:wls_objective}
+\hat{\theta}_t
+\;\in\;
+\arg\min_{\theta_t \in \Theta}
+\left\{\sum_{i=1}^n r_i(\theta_t)^2 + \lambda_{\mathrm{TS}}(\theta_t-\hat{\theta}_{t-1})^2 \right\},
+\end{equation}
+where the additional term $\lambda_{\mathrm{TS}}(\theta_t-\hat{\theta}_{t-1})^2$ enforces temporal smoothing over the previous snapshot's calibrated parameters.
+
+Economically, temporal smoothing should be interpreted as a stabilization device for the sequence of snapshot-level estimates, rather than as a claim that the latent model parameters follow a specified dynamic process. In the empirical analysis below, several values of $\lambda_{\mathrm{TS}}$ are compared in order to assess the trade-off between cross-sectional fit and temporal stability of the calibrated parameter paths.
+
+Weights are constructed multiplicatively from three components: a spread-based term, a vega-based term, and an open-interest term. Let $\texttt{spread}_i = \texttt{ask}_i-\texttt{bid}_i$ denote the bid--ask spread in coin units, and let $\texttt{vega}_i$ and $\texttt{oi}_i$ denote the vega and open interest reported by Deribit. The weight used takes the form
+\begin{equation}\label{eq:weights}
+w_i
+\;=\;
+\min\!\left\{
+\bigl(\texttt{spread}_i + \varepsilon_s\bigr)^{-p_s}
+\bigl(\texttt{vega}_i + \varepsilon_o\bigr)^{p_v}
+\bigl(\texttt{oi}_i + \varepsilon_o\bigr)^{p_{oi}},
+\; w_{\max}
+\right\},
+\end{equation}
+where the constants are set by default to
+\[
+p_s = 1,\quad p_v = 0,\quad p_{oi} = 0,\quad
+\varepsilon_s = 10^{-6},\quad \varepsilon_o = 10^{-12},\quad
+w_{\max}=10^{6}.
+\]
+The spread component downweights wide markets, while vega and open interest can be interpreted as proxies for the informational content and liquidity of the quote. 
+
+In the baseline specification, only the spread component is included in the weight (as $p_v=p_{oi}=0$). This is done so that the model is exposed to relatively illiquid and far-from-the-money options during calibration, as this is the setting where the stochastic volatility and jump components are most useful in improving pricing accuracy over the baseline Black and Heston models. The vega and open interest components are left for additional robustness checks.
+
+\subsection{Model parameters and bounds}\label{subsec:params_bounds}
+
+This section lists the parameters for each model, provides brief economic interpretations, and reports the admissible bounds enforced during calibration.
+
+\subsubsection{Black model}
+
+The Black model has a single parameter $\sigma$, the constant volatility of log-futures returns under the forward measure. The calibration bounds are:
+\[
+\sigma \in [10^{-4},\, 5].
+\]
+
+\subsubsection{Heston model}
+
+The Heston stochastic volatility model is parameterized by
+\[
+\theta_{\text{H}} = (\kappa,\theta,\sigma_v,\rho,v_0),
+\]
+where $\kappa$ is the variance mean reversion speed, $\theta$ is the long-run variance level, $\sigma_v$ is the volatility of variance (``vol-of-vol''), $\rho$ is the instantaneous correlation between the return and variance shocks, and $v_0$ is the initial variance.
+
+The calibration bounds are:
+\[
+\kappa \in [10^{-4},\, 50],\qquad
+\theta \in [10^{-6},\, 5],\qquad
+\sigma_v \in [10^{-4},\, 10],\qquad
+v_0 \in [10^{-6},\, 5],
+\]
+and
+\[
+\rho \in [\tanh(-5),\, \tanh(5)] \approx [-0.99991,\, 0.99991].
+\]
+
+\subsubsection{SVCJ model}
+
+The SVCJ model extends Heston by adding correlated jumps in returns and variance. The parameter vector is
+\[
+\theta_{\text{SVCJ}} =
+(\kappa,\theta,\sigma_v,\rho,v_0,\lambda,\ell_y,\sigma_y,\ell_v,\rho_j),
+\]
+where $(\kappa,\theta,\sigma_v,\rho,v_0)$ are as in Heston, $\lambda$ is the jump intensity, $(\ell_y,\sigma_y)$ control the return-jump distribution, $\ell_v$ is the (positive) mean parameter of the variance jump distribution, and $\rho_j$ is a dependence parameter governing return/variance jump correlation.
+
+The calibration bounds are:
+\[
+\kappa \in [10^{-4},\, 50],\quad
+\theta \in [10^{-6},\, 5],\quad
+\sigma_v \in [10^{-4},\, 10],\quad
+v_0 \in [10^{-6},\, 5],
+\]
+\[
+\lambda \in [10^{-6},\, 10],\quad
+\ell_y \in [-5,\, 5],\quad
+\sigma_y \in [10^{-4},\, 5],\quad
+\ell_v \in [10^{-6},\, 10],
+\]
+and
+\[
+\rho \in [\tanh(-5),\, \tanh(5)],\qquad
+\rho_j \in [\tanh(-5),\, \tanh(5)].
+\]
+
+\subsection{Additional constraints}\label{subsec:constraints}
+
+In addition to simple parameter bounds, the calibration incorporates two economically and numerically important admissibility conditions.
+
+\subsubsection{Feller-type condition (Heston and SVCJ)}
+
+For both Heston and SVCJ, the Feller condition \citep{Heston1993} ensures strict positivity of the variance process and improves numerical stability of Fourier-based pricing. The condition is
+\begin{equation}\label{eq:feller}
+\sigma_v^2 \;\le\; 2\kappa\theta,
+\end{equation}
+and violations are discouraged via a soft penalty. Concretely, define the violation magnitude
+\[
+\Delta_F(\theta_t) \;=\; \max\!\left\{0,\; \sigma_v^2 - \bigl(2\kappa\theta - \varepsilon_F\bigr)\right\},
+\]
+where $\varepsilon_F \ge 0$ is a small tolerance (set to $\varepsilon_F = 0$ in the baseline). The penalty contribution is appended to the residual vector with scaling constant $c_F$:
+\[
+r_F(\theta_t) \;=\; c_F \, \Delta_F(\theta_t),
+\qquad c_F = 100.
+\]
+
+\subsubsection{Moment/stability condition (SVCJ)}
+
+For SVCJ, characteristic-function evaluation imposes additional restrictions to ensure the jump component remains well-defined. The implementation penalizes violations of
+\begin{equation}\label{eq:moment}
+1 - \ell_v \rho_j \;\ge\; \varepsilon_J,
+\end{equation}
+where $\varepsilon_J = 10^{-6}$ in the baseline. Define
+\[
+\Delta_J(\theta_t) \;=\; \max\!\left\{0,\; \varepsilon_J - \bigl(1-\ell_v\rho_j\bigr)\right\},
+\]
+and append the penalty residual
+\[
+r_J(\theta_t) \;=\; c_J \, \Delta_J(\theta_t),
+\qquad c_J = 100.
+\]
+
+\subsubsection{Robust handling of numerical failures}
+
+Fourier-based pricing may occasionally return non-finite values for extreme parameter choices (e.g.\ due to overflow in exponentials). To prevent the optimizer from stalling, any pricing failure or non-finite model price is mapped to a fixed penalty residual. Specifically, for a quote $i$ with non-finite $P^{model}_i(\theta_t)$, the residual is set to
+\[
+r_i(\theta_t) \;=\; w_i \cdot \texttt{penalty\_coin},
+\qquad \texttt{penalty\_coin}=10,
+\]
+and the optimization proceeds.
+
+\subsection{Calibration implementation outline}\label{subsec:implementation_outline}
+
+Calibration is implemented as a bounded nonlinear least-squares problem, using the \texttt{scipy.optimize.least\_squares} function's Trust Region Reflective algorithm for solving nonlinear least-squares \citep{BranchColemanLi1999} from the SciPy package for Python \citep{SciPy}. Efficiency is achieved by exploiting the FFT structure: for a given maturity, a single Carr--Madan FFT call produces a grid of call prices across strikes, after which put prices are obtained via inverse put--call parity. The calibration routine therefore groups options by expiry and prices each group with one FFT evaluation per function call.\footnote{The calibration script is available on \href{https://github.com/znmahbub/SVCJ-Deribit-Inverse-Options-Pricer}{GitHub}}
+
+In addition, the FFT log-strike grid is centered dynamically per expiry bucket. Let $N$ and $\eta$ denote the FFT grid size and frequency spacing. The log-strike spacing is $\lambda = 2\pi/(N\eta)$, and the minimum log-strike parameter $b$ is chosen as
+\[
+b \;=\; \log\!\bigl(\mathrm{median}(K)\bigr) \;-\; \tfrac12 N \lambda,
+\]
+so that the grid is centered around the typical strikes observed for that expiry. This improves interpolation quality while keeping FFT grids compact.
+
+Algorithm~\ref{alg:calibration} summarizes the procedure executed at each snapshot time $t$.
+
+\begin{algorithm}[H]
+\caption{Cross-sectional calibration at snapshot time $t$.}\label{alg:calibration}
+\begin{algorithmic}[1]
+\State \textbf{Input:} raw snapshot data; model family; FFT base parameters; weighting configuration.
+\State Filter snapshot to liquid options (Section~\ref{subsec:data_filters}); compute clean mid prices $P^{mkt}_i$.
+\State For each expiry bucket, compute forward proxy $F_0$ as median \texttt{futures\_price}; compute moneyness $K/F_0$.
+\State Build a per-expiry pricing plan: store indices, strikes, maturity $T$, forward proxy $F_0$, and FFT grid parameters (with dynamic centering).
+\State Define weights $w_i$ according to \eqref{eq:weights}.
+\State Define residual vector $r(\theta_t)$ consisting of weighted squared difference between observed and model prices plus the time smoothing term $r_i(\theta_t)$, and constraint penalties $r_F(\theta_t)$, $r_J(\theta)$ where applicable.
+\State Solve the bounded least-squares problem \eqref{eq:wls_objective}.
+\State \textbf{Output:} calibrated parameters $\hat{\theta}_t$; fit diagnostics (RMSE, MAE).
+\end{algorithmic}
+\end{algorithm}
+
+% ------------------------------------------------------------
+\section{Calibration results}\label{sec:calibration_results}
+
+\subsection{Choice of the temporal smoothing parameter $\lambda_{TS}$}\label{subsec:lambda_ts_choice}
+
+Figure~\ref{fig:regularisation_tradeoff} summarizes the temporal smoothing trade-off between out-of-sample pricing error, number of function evaluations and parameter stability. The left panel shows the two direct costs of calibration at each value of $\lambda_{TS}$: pricing accuracy, measured by the mean out-of-sample test RMSE, and optimisation effort, measured by the mean number of function evaluations. The right panel shows how smooth the resulting parameter paths are over time.
+
+The roughness index in the right panel is constructed to summarize the time-series instability of the calibrated SVCJ parameters. For each currency and each selected parameter, we first compute the median absolute change between consecutive snapshots, and then scale it by the parameter's cross-sectional dispersion, measured by the interquartile range. The index plotted in Figure~\ref{fig:regularisation_tradeoff} is the average of these standardized median changes across the selected parameters and across BTC and ETH. A lower value therefore means that, relative to its own scale, a parameter moves less from one snapshot to the next, so the calibration is smoother and more stable over time.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/regularisation_tradeoff.png}
+\caption{Regularisation trade-off across the SVCJ sweep. The left panel reports the mean out-of-sample test RMSE and the mean number of function evaluations across snapshots. The right panel reports an aggregate roughness index for the calibrated SVCJ parameter paths. The vertical dashed line marks the final baseline choice, $\lambda_{TS}=100$.}
+\label{fig:regularisation_tradeoff}
+\end{figure}
+
+The left panel of Figure~\ref{fig:regularisation_tradeoff} shows that the raw fit optimum is attained at the very low end of the grid. The smallest mean test RMSE is achieved at $\lambda_{TS}=1$, where the average snapshot-level test RMSE is 0.002890. But the same point in the figure also shows why this is not an attractive baseline. The blue series indicates a mean of 26.24 function evaluations, while the right panel reports a roughness index of 0.1127. In other words, the gain in RMSE relative to the rest of the grid is negligible in magnitude, yet it comes with both higher computational cost and materially rougher parameter paths.
+
+The practically relevant part of the figure is the middle of the grid, especially $\lambda_{TS}\in\{25,50,100\}$. Figure~\ref{fig:regularisation_tradeoff} shows that $\lambda_{TS}=25$ is a transition point rather than a natural final choice. On the one hand, the right panel shows that moving from $\lambda_{TS}=10$ to $\lambda_{TS}=25$ produces a sharp reduction in roughness, from 0.0864 to 0.0538. On the other hand, the left panel shows that this smoothing gain is not accompanied by superior pricing performance: the mean test RMSE at $\lambda_{TS}=25$ is 0.002930, which is worse than at both $\lambda_{TS}=50$ and $\lambda_{TS}=100$.
+
+The actual decision is therefore between $\lambda_{TS}=50$ and $\lambda_{TS}=100$. In the left panel, the black RMSE line is essentially flat between these two values: the mean test RMSE changes only from 0.002907 at $\lambda_{TS}=50$ to 0.002911 at $\lambda_{TS}=100$, which is economically negligible. But the blue optimisation-cost line continues to fall, from 13.69 to 11.71 mean function evaluations. At the same time, the right panel shows that the roughness index also improves, declining from 0.0676 to 0.0618. So relative to $\lambda_{TS}=50$, the choice $\lambda_{TS}=100$ preserves virtually all of the pricing accuracy while improving both computational efficiency and path smoothness.
+
+The figure also shows why it is not sensible to push the penalty much further. For $\lambda_{TS}\ge 250$, the right panel continues to move downward, so the parameter paths do become smoother, and the blue line in the left panel also declines slightly further. But the black RMSE line then starts to drift upward in a visible way: the mean test RMSE rises to 0.002961 at $\lambda_{TS}=250$, 0.002973 at $\lambda_{TS}=500$, and 0.002995 at $\lambda_{TS}=1000$. This is the point at which the regularisation begins to smooth too aggressively and the pricing fit deteriorates.
+
+For the remainder of the analysis, we therefore fix $\lambda_{TS}=100$ as the common baseline.
+
+\subsection{RMSE, MAE, and within-spread proportion on the test samples}\label{subsec:time_series_diagnostics}
+
+Fixing $\lambda_{TS}=100$, the out-of-sample pricing error metrics confirm that SVCJ improves on both benchmark models in a persistent way. Table~\ref{tab:fit_summary_reg100} summarizes the average out-of-sample pricing diagnostics separately for BTC, ETH, and the pooled sample. The pattern is consistent across all three metrics: Black performs worst throughout, Heston delivers a large improvement over Black, and SVCJ then improves further on Heston in both assets and in the pooled data.
+
+\begin{table}[H]
+\centering
+\caption{Average out-of-sample pricing diagnostics at $\lambda_{TS}=100$, by asset and model.}
+\label{tab:fit_summary_reg100}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccccc}
+\toprule
+& \multicolumn{3}{c}{Black} & \multicolumn{3}{c}{Heston} & \multicolumn{3}{c}{SVCJ} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
+Asset & RMSE & MAE & Within spread & RMSE & MAE & Within spread & RMSE & MAE & Within spread \\
+\midrule
+BTC    & 0.005330 & 0.003565 & 25.7\% & 0.002892 & 0.001482 & 45.2\% & 0.002546 & 0.001004 & 61.9\% \\
+ETH    & 0.006151 & 0.003929 & 32.1\% & 0.004485 & 0.002112 & 49.1\% & 0.004227 & 0.001626 & 63.1\% \\
+Pooled & 0.005592 & 0.003772 & 28.7\% & 0.003247 & 0.001771 & 47.0\% & 0.002911 & 0.001304 & 62.4\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+In BTC, the gain from SVCJ is especially clear. Mean test RMSE falls from 0.005330 under Black and 0.002892 under Heston to 0.002546 under SVCJ, while mean test MAE falls from 0.003565 and 0.001482 to 0.001004. ETH shows the same pattern, although the margin over Heston is somewhat smaller: mean test RMSE declines from 0.006151 under Black and 0.004485 under Heston to 0.004227 under SVCJ, and mean test MAE declines from 0.003929 and 0.002112 to 0.001626. The pooled error measures lead to the same conclusion: mean test RMSE falls from 0.005592 under Black to 0.003247 under Heston and then to 0.002911 under SVCJ, while mean test MAE falls from 0.003772 to 0.001771 and then to 0.001304.
+
+The within-spread statistic tells the same story in more economically interpretable terms. In BTC, the mean share of test options priced inside the quoted bid--ask spread rises from 25.7\% under Black and 45.2\% under Heston to 61.9\% under SVCJ. In ETH, the same proportion rises from 32.1\% and 49.1\% to 63.1\%. Pooled across both assets, SVCJ prices 62.4\% of the test options inside the spread, compared with 47.0\% for Heston and 28.7\% for Black. 
+
+Taken together, Table~\ref{tab:fit_summary_reg100} shows that the improvement from SVCJ is not confined to a single asset or a single error metric. The model dominates Black decisively and remains meaningfully better than Heston.
+
+The snapshot-level paths show that the improvement is persistent through time. Figure~\ref{fig:ts_rmse_mae_panel} shows that in BTC, SVCJ beats Heston on test RMSE in 96.1\% of snapshots and on test MAE in 97.9\% of snapshots. In ETH, the corresponding shares are 92.5\% and 97.4\%. The within-spread share in Figure~\ref{fig:ts_within_spread_panel} is also higher for SVCJ in 97.4\% of BTC snapshots and 93.8\% of ETH snapshots. The Black benchmark is almost never competitive. The more relevant comparison is Heston versus SVCJ, and here the jump extension still wins in a large majority of dates, even though the margin is narrower in ETH than in BTC.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/ts_rmse_mae_panel.png}
+    \caption{Snapshot-level out-of-sample RMSE, MAE and within-spread proportion paths at $\lambda_{TS}=100$.}
+    \label{fig:ts_rmse_mae_panel}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/ts_within_spread_panel.png}
+    \caption{Snapshot-level within-spread frequencies at $\lambda_{TS}=100$, shown separately for BTC and ETH.}
+    \label{fig:ts_within_spread_panel}
+\end{figure}
+
+Two features of the time-series plots are worth emphasizing. First, the SVCJ advantage is not driven by a handful of outliers. The model improves the fit through most of the sample. Second, the gain does not vanish when the surface becomes harder to fit. In the more difficult episodes, Heston often moves closer to SVCJ, but it does not systematically eliminate the gap. This is exactly the setting in which richer tail and skew dynamics should matter most.
+
+\subsection{Out-of-sample pricing diagnostics by maturity and moneyness}\label{subsec:cross_sectional_diagnostics}
+
+To check whether the improved out-of-sample pricing performance of the SVCJ model holds up across different maturity and moneyness values, we partition the option-level test sample separately for BTC and ETH into equal-count buckets by maturity and by moneyness.
+
+As shown in Figure~\ref{fig:bucket_diagnostics_maturity}, the SVCJ model consistently outperforms the benchmarks across the full surface in both assets. In BTC, SVCJ dominates Heston in every maturity bucket. The gain is already visible in the shortest-expiry bucket, where RMSE falls from 0.001845 under Heston to 0.001702 under SVCJ, but it becomes even clearer further out the term structure. In the longest-maturity bucket, BTC RMSE falls from 0.004210 to 0.003624. The ETH pattern is more modest but still systematic: SVCJ improves on Heston in all five maturity buckets, with RMSE reductions ranging from about 4.7\% to 9.2\%.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/bucket_diagnostics_maturity.png}
+    \caption{Out-of-sample mean RMSE by equal-count maturity buckets, separately for BTC and ETH at $\lambda_{TS}=100$.}
+    \label{fig:bucket_diagnostics_maturity}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/bucket_diagnostics_moneyness.png}
+    \caption{Out-of-sample mean RMSE by equal-count moneyness buckets, separately for BTC and ETH at $\lambda_{TS}=100$.}
+    \label{fig:bucket_diagnostics_moneyness}
+\end{figure}
+
+The moneyness breakdown in Figure~\ref{fig:bucket_diagnostics_moneyness} is even more informative. In BTC, the largest gains occur in the low-moneyness region, where the surface is hardest to match with a pure diffusion model. In the lowest BTC moneyness bucket, test RMSE falls from 0.002797 under Heston to 0.002033 under SVCJ, while the Black benchmark is far worse at 0.008054. The same qualitative result holds in ETH: the lowest moneyness bucket improves from 0.003060 under Heston to 0.002522 under SVCJ. Around the center of the surface, the gains remain positive, but they are less dramatic. At the highest ETH moneyness bucket, for example, Heston and SVCJ are very close in RMSE terms (0.007284 versus 0.007232), which is exactly what one would expect if the incremental value of the jump block is concentrated in the more skewed regions of the volatility surface.
+
+Taken together, these bucket diagnostics support a simple interpretation: the SVCJ model is not just better on average, it is better precisely in the regions where richer dynamics should matter most.
+
+\subsection{Identification issues and parameter stability}\label{subsec:identification_and_stability}
+
+The pricing results are strong, but the parameter paths should not be read as if every component of the SVCJ state vector was strongly identified at every snapshot. Figures~\ref{fig:param_paths_btc} and \ref{fig:param_paths_eth} below show selected calibrated parameter paths for the SVCJ model, separately for BTC and ETH. Even after fixing time smoothing at $\lambda_{TS}=100$, several parameters show unstable paths over time remain partially substitutable, especially in ETH. 
+
+Starting with the more stable parameter paths, BTC loads heavily on a negative diffusion correlation between the returns and volatility processes, with mean $\rho=-0.503$, whereas ETH is close to zero on average, with mean $\rho\approx 0.001$. Economically, this suggests that the BTC surface uses a pronounced leverage-type channel to generate skew, while ETH relies less on diffusion leverage and more on the volatility and jump block. The variance parameters tell a similar story. ETH has a much larger average long-run variance ($\theta=0.242$ versus 0.105 in BTC), a higher initial variance ($v_0=0.386$ versus 0.234), and substantially higher vol-of-vol ($\sigma_v=2.545$ versus 1.140). In plain terms, ETH requires a steeper and more reactive volatility structure than BTC.
+
+The jump block also differs meaningfully across assets. Both markets favour negative average price jumps: the mean $\ell_y$ is -0.155 in BTC and -0.102 in ETH. BTC, however, still uses a nontrivial price-jump dispersion, with mean $\sigma_y=0.167$. ETH is different. There the median $\sigma_y$ is essentially zero, while the median co-jump dependence parameter is $\rho_j=-0.999$, right at the lower boundary. At the same time, the average jump intensity is higher in ETH ($\lambda=2.483$) than in BTC ($\lambda=1.484$). The conclusion is that the ETH surface often prefers to encode jump risk through frequent downside co-jumps in price and variance, rather than through a separate, freely varying jump-size dispersion parameter.
+
+This is also where the identification warning becomes unavoidable. In ETH, $|\rho_j|>0.95$ in 53.4\% of snapshots, and the Feller condition binds in 56.2\% of snapshots. That does not invalidate the pricing comparison, but it does mean that some of the ETH jump and variance parameters should be interpreted as weakly identified parameters rather than clean structural estimates. In BTC the same issue is present but milder: $|\rho|>0.95$ in 11.9\% of snapshots, $|\rho_j|>0.95$ essentially never occurs, and the Feller condition binds in around 9.0\% of snapshots.
+
+The correlation structure of the parameter estimates points to similar conclusions. In BTC, the long-run variance $\theta$ and the initial variance $v_0$ are positively correlated (about 0.49), which is consistent with partial substitution between current and long-run variance levels. In ETH, the jump intensity $\lambda$ and the jump-size dispersion $\sigma_y$ are strongly positively correlated (about 0.71), suggesting that the calibration often identifies the overall jump contribution more clearly than its decomposition into jump frequency and jump-size uncertainty.
+
+The economically interpretable part of the parameter dynamics is therefore the broad regime movement, not every single wiggle. The pair $(v_0,\theta)$ tracks the volatility regime. The correlation parameter $\rho$ governs how much of the smile asymmetry is generated by diffusion leverage. The parameter $\sigma_v$ controls how sharply the short end of the surface can bend. The jump-intensity and jump-size parameters, $(\lambda,\ell_y,\sigma_y,\ell_v,\rho_j)$, then pick up the part of the cross section that looks too asymmetric or heavy-tailed to be explained by a pure stochastic-volatility diffusion.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/param_paths_btc.png}
+    \caption{Selected SVCJ parameter paths on BTC data}
+    \label{fig:param_paths_btc}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{images/param_paths_eth.png}
+    \caption{Selected SVCJ parameter paths on ETH data}
+    \label{fig:param_paths_eth}
+\end{figure}
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Delta-Hedging Inverse Options}
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONCLUSION
+\newpage
+\chapter*{Conclusion}
+\addcontentsline{toc}{chapter}{Conclusion}
+abc
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\bibliographystyle{apalike}
+\IfFileExists{references.bib}{%
+  \bibliography{references}%
+}{%
+  \begin{thebibliography}{99}
+  \end{thebibliography}
+}%
+\addcontentsline{toc}{chapter}{Bibliography}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\appendix
+\newpage
+\chapter{Detailed Explanation of the Carr--Madan FFT Procedure}
+\label{app:carr_madan}
+\setcounter{equation}{0} % Reset equation counter
+\renewcommand{\theequation}{A.\arabic{equation}} % Format as A.1, A.2, etc.
+
+\noindent
+This appendix provides a detailed derivation of the Carr--Madan Fast Fourier Transform (FFT)
+method for pricing European options, following \citet{CarrMadan1999}. The method computes option
+prices over a grid of strikes efficiently when the characteristic function of the log-underlying
+is available in (semi-)closed form, as in affine (jump-)diffusion models.
+
+\subsection*{A.1 Foundations and the damping factor}
+
+\noindent
+Let $S_T$ be the underlying price at maturity $T$, and let $s_T:=\ln S_T$ denote the log-price.
+Under a pricing measure $\mathbb{Q}$ with deterministic discounting (constant short rate $r$ for
+simplicity), the time-$0$ price of a European call with strike $K$ is
+\[
+C(K,T)
+=
+\mathbb{E}^{\mathbb{Q}}\!\left[e^{-rT}(S_T-K)^+\right]
+=
+e^{-rT}\int_{-\infty}^{\infty} (e^{s}-K)^+ f_{s_T}(s)\,\mathrm{d}s,
+\]
+where $f_{s_T}$ is the $\mathbb{Q}$-density of $s_T$. (In settings where discounting is negligible,
+one may set $r=0$.)
+
+Treat the call price as a function of log-strike $k:=\ln K$. Then
+$\lim_{k\to -\infty} C(e^k,T)=e^{-rT}\mathbb{E}^{\mathbb{Q}}[S_T]=S_0$ (in standard equity settings),
+so $C(e^k,T)$ is not square-integrable in $k$ over $\mathbb{R}$ and cannot be Fourier-transformed
+directly.
+
+Following \citet{CarrMadan1999}, introduce an exponential damping factor $\alpha>0$ and define the
+\emph{damped call price}
+\begin{equation}
+c(k,T) := e^{\alpha k}\,C(e^k,T).
+\label{eq:damped_price}
+\end{equation}
+For suitable $\alpha$, $c(\cdot,T)$ is square-integrable. A sufficient condition is existence of
+the $(\alpha+1)$-moment:
+\[
+\mathbb{E}^{\mathbb{Q}}[S_T^{\alpha+1}] < \infty,
+\]
+which ensures $c(k,T)\to 0$ as $k\to\pm\infty$ and justifies Fourier inversion.
+
+\subsection*{A.2 Fourier transform of the damped price}
+
+\noindent
+Define the Fourier transform of $c(\cdot,T)$ by
+\[
+\widehat{c}(v,T)
+:=
+\int_{-\infty}^{\infty} e^{ivk}\,c(k,T)\,\mathrm{d}k,
+\qquad v\in\mathbb{R}.
+\]
+Using \eqref{eq:damped_price} and writing the call payoff integral in terms of $k$ gives
+\[
+\widehat{c}(v,T)
+=
+\int_{-\infty}^{\infty} e^{ivk} e^{\alpha k}
+\left(
+e^{-rT}\int_{k}^{\infty}(e^{s}-e^{k})\,f_{s_T}(s)\,\mathrm{d}s
+\right)\mathrm{d}k.
+\]
+Under the moment condition above, Fubini's theorem permits exchanging the order of integration:
+\[
+\widehat{c}(v,T)
+=
+e^{-rT}\int_{-\infty}^{\infty} f_{s_T}(s)
+\left(
+\int_{-\infty}^{s} e^{(\alpha+iv)k}\,(e^{s}-e^{k})\,\mathrm{d}k
+\right)\mathrm{d}s.
+\]
+Evaluate the inner integral:
+\begin{align*}
+\int_{-\infty}^{s} e^{(\alpha+iv)k}(e^{s}-e^{k})\,\mathrm{d}k
+&=
+e^{s}\int_{-\infty}^{s} e^{(\alpha+iv)k}\,\mathrm{d}k
+-
+\int_{-\infty}^{s} e^{(\alpha+1+iv)k}\,\mathrm{d}k \\
+&=
+e^{s}\frac{e^{(\alpha+iv)s}}{\alpha+iv}
+-
+\frac{e^{(\alpha+1+iv)s}}{\alpha+1+iv} \\
+&=
+\frac{e^{(\alpha+1+iv)s}}{(\alpha+iv)(\alpha+1+iv)}.
+\end{align*}
+Therefore,
+\[
+\widehat{c}(v,T)
+=
+\frac{e^{-rT}}{(\alpha+iv)(\alpha+1+iv)}
+\int_{-\infty}^{\infty} e^{(\alpha+1+iv)s} f_{s_T}(s)\,\mathrm{d}s
+=
+\frac{e^{-rT}\,\mathbb{E}^{\mathbb{Q}}\!\left[e^{(\alpha+1+iv)s_T}\right]}
+{(\alpha+iv)(\alpha+1+iv)}.
+\]
+Let $\phi_T(u):=\mathbb{E}^{\mathbb{Q}}[e^{iu s_T}]$ denote the characteristic function of $s_T$.
+Since $e^{(\alpha+1+iv)s_T}=e^{i(v-i(\alpha+1))s_T}$, we obtain
+\begin{equation}
+\widehat{c}(v,T)
+=
+\frac{e^{-rT}\,\phi_T\!\left(v-i(\alpha+1)\right)}
+{(\alpha+iv)(\alpha+1+iv)}
+=
+\frac{e^{-rT}\,\phi_T\!\left(v-i(\alpha+1)\right)}
+{\alpha^2+\alpha-v^2+i(2\alpha+1)v},
+\label{eq:psi_transform}
+\end{equation}
+where we used $(\alpha+iv)(\alpha+1+iv)=\alpha^2+\alpha-v^2+i(2\alpha+1)v$.
+
+\subsection*{A.3 Inversion and the Carr--Madan pricing formula}
+
+\noindent
+By Fourier inversion,
+\[
+c(k,T)
+=
+\frac{1}{2\pi}\int_{-\infty}^{\infty} e^{-ivk}\,\widehat{c}(v,T)\,\mathrm{d}v.
+\]
+Since $c(k,T)$ is real-valued, the integral can be written in the one-sided form
+\[
+c(k,T)
+=
+\frac{1}{\pi}\int_{0}^{\infty} \Re\!\left(e^{-ivk}\,\widehat{c}(v,T)\right)\mathrm{d}v.
+\]
+Finally, undo the damping $c(k,T)=e^{\alpha k}C(e^k,T)$ to obtain
+\begin{equation}
+C(K,T)
+=
+\frac{e^{-\alpha k}}{\pi}\int_{0}^{\infty}
+\Re\!\left(e^{-ivk}\,\widehat{c}(v,T)\right)\mathrm{d}v,
+\qquad k=\ln K,
+\label{eq:carr_madan_final}
+\end{equation}
+with $\widehat{c}(v,T)$ given explicitly by \eqref{eq:psi_transform}.
+Equations \eqref{eq:psi_transform}--\eqref{eq:carr_madan_final} are the Carr--Madan Fourier pricing
+representation \citep{CarrMadan1999}.
+
+\subsection*{A.4 Discretization and the FFT}
+
+\noindent
+To compute \eqref{eq:carr_madan_final} numerically, truncate the integral and discretize the
+Fourier variable. Choose $N$ (typically a power of $2$ for FFT efficiency) and define a grid
+\[
+v_j := j\eta,\qquad j=0,1,\dots,N-1,
+\]
+with spacing $\eta>0$. Approximating the integral by a weighted Riemann/trapezoidal sum yields
+\[
+c(k,T)\approx
+\frac{1}{\pi}\sum_{j=0}^{N-1} w_j\,
+\Re\!\left(e^{-iv_j k}\,\widehat{c}(v_j,T)\right)\eta,
+\]
+where $w_j$ are numerical quadrature weights (e.g.\ trapezoidal weights $w_0=w_{N-1}=1/2$ and
+$w_j=1$ otherwise; Alternatively, Simpson’s rule may be used, with weights $w_0=w_{N-1}=1$, $w_j=4$ for odd $j$, and $w_j=2$ for even $j\in\{2,\dots,N-2\}$, which yields higher-order accuracy for smooth integrands, reducing the discretization error.).
+
+To exploit the FFT, compute prices on an evenly spaced log-strike grid
+\[
+k_u := b + u\lambda,\qquad u=0,1,\dots,N-1,
+\]
+where $\lambda>0$ is the log-strike spacing and $b$ sets the minimum log-strike. Impose the FFT
+compatibility condition which synchronizes the strike grid and frequency grid so that the inverse Fourier transform reduces to a discrete Fourier transform:
+\[
+\lambda\eta=\frac{2\pi}{N}.
+\]
+Then
+\[
+c(k_u,T)\approx
+\frac{1}{\pi}\Re\!\left(
+\sum_{j=0}^{N-1} e^{-iv_j(b+u\lambda)}\,\widehat{c}(v_j,T)\,w_j\,\eta
+\right)
+=
+\frac{1}{\pi}\Re\!\left(
+\sum_{j=0}^{N-1} e^{-iv_j b}\,e^{-i\frac{2\pi}{N}ju}\,
+\widehat{c}(v_j,T)\,w_j\,\eta
+\right).
+\]
+Define the sequence
+\[
+x_j := e^{-iv_j b}\,\widehat{c}(v_j,T)\,w_j\,\eta,\qquad j=0,\dots,N-1.
+\]
+Then the bracketed sum is precisely the discrete Fourier transform (DFT) of $(x_j)$ evaluated at
+index $u$, which can be computed for all $u$ in $O(N\log N)$ time via the FFT:
+\[
+c(k_u,T)\approx \frac{1}{\pi}\Re\!\big(\mathrm{DFT}(x)_u\big),
+\qquad
+C(e^{k_u},T)=e^{-\alpha k_u}c(k_u,T).
+\]
+In our application, $\phi_T(\cdot)$ is provided by the model characteristic function derived in the
+main text (e.g.\ Section~\ref{subsec:charfunc}), evaluated at the complex argument
+$v-i(\alpha+1)$ as required by \eqref{eq:psi_transform}.
+
+\subsection*{A.5 Practical implementation considerations}
+
+\begin{itemize}
+\item \textbf{Choice of damping factor $\alpha$.}
+The parameter $\alpha>0$ must be chosen so that $\mathbb{E}^{\mathbb{Q}}[S_T^{\alpha+1}]<\infty$,
+equivalently, so that $\phi_T(v-i(\alpha+1))$ exists for the required range of $v$.
+In models with jumps, this can impose nontrivial restrictions on $\alpha$ (through exponential
+moments of the jump component). Practical guidance on admissible damping and numerical stability is
+discussed in \citet{CarrMadan1999} and \citet{Lee2004}.
+
+\item \textbf{Truncation/discretization parameters.}
+The truncation level $v_{\max}=(N-1)\eta$ should be large enough to control truncation error, and
+$\eta$ should be small enough to control discretization error. In practice one selects
+$(N,\eta)$ to cover the strike range of interest via $\lambda=2\pi/(N\eta)$ and checks numerical
+stability by refinement.
+
+\item \textbf{Characteristic function evaluation.}
+Care is required when evaluating $\phi_T(u)$ at complex arguments, in particular in models where
+$\phi_T$ involves complex square roots and logarithms (e.g.\ Heston/SVCJ Riccati solutions). A
+consistent branch choice (typically enforcing $\Re(d(u))>0$ for the Heston discriminant) helps avoid
+numerical discontinuities.
+\end{itemize}
+
+\noindent
+This FFT-based approach yields an efficient way to compute a full grid of call prices across
+strikes, which is particularly useful for calibration to cross-sectional option data.
+
+
+\newpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Characteristic functions under the futures price numeraire for the Black and Heston models}
+\label{app:cf_black_heston}
+\setcounter{equation}{0} % Reset equation counter
+\renewcommand{\theequation}{B.\arabic{equation}} % Format as B.1, B.2, etc.
+
+This appendix derives the conditional characteristic functions of $X_T=\log F_T$ given $(X_t,V_t)$
+(or $X_t$ alone in the Black model) under the \emph{futures price numeraire}. In both cases we work under the pricing measure for which the futures price $(F_t)_{t\ge 0}$ is a martingale, i.e.
+\[
+\mathbb{E}\!\left[\frac{\mathrm{d}F_t}{F_t}\Big|\mathcal{F}_t\right]=0.
+\]
+Equivalently, for $X_t=\log F_t$ the drift is chosen so that $F_t=e^{X_t}$ has zero drift in
+expectation.
+
+\subsection*{B.1 Black model}
+\label{app:black_cf}
+
+\paragraph{Model.}
+Under the futures price numeraire, the Black model assumes
+\begin{equation}
+\mathrm{d}F_t = \sigma F_t\,\mathrm{d}W_t,
+\qquad \sigma>0,
+\label{eq:black_F}
+\end{equation}
+so that $F_t$ is a martingale. Let $X_t:=\log F_t$. By It\^{o}'s formula,
+\begin{equation}
+\mathrm{d}X_t
+=
+-\frac12\sigma^2\,\mathrm{d}t
++
+\sigma\,\mathrm{d}W_t.
+\label{eq:black_X}
+\end{equation}
+
+\paragraph{Conditional characteristic function.}
+Fix $u\in\mathbb{C}$ and define
+\[
+\phi_{\mathrm{BL}}(u;t,T):=\mathbb{E}\!\left[e^{iuX_T}\mid\mathcal{F}_t\right].
+\]
+From \eqref{eq:black_X},
+\[
+X_T
+=
+X_t
+-\frac12\sigma^2(T-t)
++\sigma\,(W_T-W_t),
+\]
+and $W_T-W_t\sim\mathcal{N}(0,T-t)$ is independent of $\mathcal{F}_t$. Hence
+\begin{align}
+\phi_{\mathrm{BL}}(u;t,T)
+&=
+\exp\!\Big(iu\big(X_t-\tfrac12\sigma^2(T-t)\big)\Big)\;
+\mathbb{E}\!\left[e^{iu\sigma(W_T-W_t)}\right]
+\nonumber\\
+&=
+\exp\!\Big(iuX_t-\tfrac12 iu\sigma^2\tau\Big)\;
+\exp\!\Big(-\tfrac12u^2\sigma^2\tau\Big),
+\qquad \tau:=T-t.
+\label{eq:black_cf}
+\end{align}
+Therefore,
+\begin{equation}
+\boxed{
+\phi_{\mathrm{BL}}(u;t,T)
+=
+\exp\!\left(iuX_t-\frac12\sigma^2\tau\,(u^2+iu)\right).
+}
+\label{eq:black_cf_boxed}
+\end{equation}
+
+\subsection*{B.2 Heston model}
+\label{app:heston_cf}
+
+\paragraph{Model.}
+Under the futures price numeraire, the Heston model assumes
+\begin{align}
+\mathrm{d}F_t
+&=
+F_t\sqrt{V_t}\,\mathrm{d}W_{1t},
+\label{eq:heston_F}\\
+\mathrm{d}V_t
+&=
+\kappa(\theta-V_t)\,\mathrm{d}t
++
+\sigma_v\sqrt{V_t}\,\mathrm{d}W_{2t},
+\label{eq:heston_V}
+\end{align}
+with $\kappa>0$, $\theta>0$, $\sigma_v>0$, and $\mathrm{corr}(\mathrm{d}W_{1t},\mathrm{d}W_{2t})=\rho$.
+Let $X_t:=\log F_t$. By It\^{o}'s formula applied to $F_t=e^{X_t}$,
+\begin{equation}
+\mathrm{d}X_t
+=
+-\frac12 V_t\,\mathrm{d}t
++
+\sqrt{V_t}\,\mathrm{d}W_{1t}.
+\label{eq:heston_X}
+\end{equation}
+The drift $-\tfrac12V_t$ is the unique choice ensuring that $F_t$ is a martingale under this measure.
+
+\paragraph{Martingale ansatz.}
+Fix $u\in\mathbb{C}$ and define the conditional characteristic function
+\[
+\phi_{\mathrm{H}}(u;t,T)
+:=
+\mathbb{E}\!\left[e^{iuX_T}\mid X_t,V_t\right].
+\]
+Motivated by the affine structure of \eqref{eq:heston_X}--\eqref{eq:heston_V}, we conjecture the
+exponential-affine form
+\begin{equation}
+\phi_{\mathrm{H}}(u;t,T)
+=
+\exp\!\big(A_{\mathrm{H}}(\tau;u)+B_{\mathrm{H}}(\tau;u)V_t+iuX_t\big),
+\qquad \tau:=T-t,
+\label{eq:heston_affine_ansatz}
+\end{equation}
+with terminal conditions $A_{\mathrm{H}}(0;u)=0$ and $B_{\mathrm{H}}(0;u)=0$.
+
+Define $\Phi_t:=\exp(A_{\mathrm{H}}(\tau;u)+B_{\mathrm{H}}(\tau;u)V_t+iuX_t)$. As in the SVCJ
+derivation in Section~\ref{sec:cf_derivation}, we choose $A_{\mathrm{H}}$ and $B_{\mathrm{H}}$ so that
+$(\Phi_t)_{t\in[0,T]}$ is a martingale. Applying It\^{o}'s formula to $\Phi(t,X_t,V_t)$ and collecting
+the predictable drift terms yields a drift that is affine in $V_t$. Setting this drift equal to zero
+for all $(X_t,V_t)$ produces the Riccati system
+\begin{align}
+\frac{\partial}{\partial \tau}B_{\mathrm{H}}(\tau;u)
+&=
+\frac12\sigma_v^2 B_{\mathrm{H}}(\tau;u)^2
++
+(\rho\sigma_v iu-\kappa)\,B_{\mathrm{H}}(\tau;u)
+-\frac12(u^2+iu),
+\qquad B_{\mathrm{H}}(0;u)=0,
+\label{eq:heston_B_riccati}
+\\[4pt]
+\frac{\partial}{\partial \tau}A_{\mathrm{H}}(\tau;u)
+&=
+\kappa\theta\,B_{\mathrm{H}}(\tau;u),
+\qquad A_{\mathrm{H}}(0;u)=0.
+\label{eq:heston_A_ode}
+\end{align}
+
+\paragraph{Closed-form solution.}
+Define
+\begin{align}
+d(u) &:= \sqrt{\big(\kappa-\rho\sigma_v i u\big)^2 + \sigma_v^2\big(u^2+i u\big)}, \\
+g(u) &:= \frac{\kappa-\rho\sigma_v i u - d(u)}{\kappa-\rho\sigma_v i u + d(u)},
+\qquad \Re(d(u))>0.
+\end{align}
+Then \eqref{eq:heston_B_riccati} admits the closed-form solution \citep{Heston1993}
+\begin{equation}
+\boxed{
+B_{\mathrm{H}}(\tau;u)
+=
+\frac{\kappa-\rho\sigma_v i u - d(u)}{\sigma_v^2}\,
+\frac{1-e^{-d(u)\tau}}{1-g(u)e^{-d(u)\tau}},}
+\label{eq:heston_B_closed}
+\end{equation}
+and integrating \eqref{eq:heston_A_ode} gives \citep{Heston1993}
+\begin{equation}
+\boxed{
+A_{\mathrm{H}}(\tau;u)
+=
+\frac{\kappa\theta}{\sigma_v^2}
+\left[
+\big(\kappa-\rho\sigma_v i u - d(u)\big)\tau
+-
+2\log\!\left(\frac{1-g(u)e^{-d(u)\tau}}{1-g(u)}\right)
+\right].}
+\label{eq:heston_A_closed}
+\end{equation}
+
+\paragraph{Result.}
+Therefore, the Heston characteristic function under the futures price numeraire is
+\begin{equation}
+\boxed{
+\phi_{\mathrm{H}}(u;t,T)
+=
+\exp\!\big(A_{\mathrm{H}}(\tau;u)+B_{\mathrm{H}}(\tau;u)V_t+iuX_t\big),
+\qquad \tau=T-t,
+}
+\label{eq:heston_cf_boxed}
+\end{equation}
+with $A_{\mathrm{H}}$ and $B_{\mathrm{H}}$ given by \eqref{eq:heston_A_closed} and
+\eqref{eq:heston_B_closed}.
+
+\newpage
+
+% ===================== Appendix C =====================
+\chapter{Proof of Put--Call Parity for Inverse Options under the Futures Price Numeraire}
+\label{app:pcp_futures_numeraire}
+\setcounter{equation}{0}
+\renewcommand{\theequation}{C.\arabic{equation}}
+
+\noindent
+This appendix proves the put--call parity stated in Theorem~\ref{eq:pcp_futures_numeraire} in the main
+text. Throughout, we assume zero discounting (equivalently, a zero interest rate) and a frictionless
+market.
+
+\subsection*{C.1 Payoff identity}
+Let $F_T$ denote the futures price at maturity $T$ and fix a strike $K>0$. The European call and put
+payoffs at $T$ are
+\[
+(F_T-K)^+,
+\qquad
+(K-F_T)^+.
+\]
+For every real number $x$, the identity $(x)^+ - (-x)^+ = x$ holds. Applying it with $x=F_T-K$
+yields the pointwise payoff equality
+\begin{equation}
+(F_T-K)^+ - (K-F_T)^+ = F_T - K.
+\label{eq:pcp_payoff_identity}
+\end{equation}
+Therefore, a portfolio that is long one call and short one put (same $K,T$) replicates the forward-type
+payoff $F_T-K$.
+
+\subsection*{C.2 Pricing the forward-type payoff with a futures contract (zero discounting)}
+Let $C_t(K,T)$ and $P_t(K,T)$ be the time-$t$ prices (in USD units) of the call and put. By
+linearity of pricing,
+\begin{equation}
+C_t(K,T) - P_t(K,T)
+\quad \text{is the time-$t$ value of a claim paying } \quad F_T-K \text{ at } T.
+\label{eq:pcp_value_forward_claim}
+\end{equation}
+
+Under zero discounting, the payoff $F_T-K$ can be replicated using (i) a long position in one
+futures contract and (ii) a static cash position:
+\begin{itemize}
+\item Enter a long futures position at time $t$. With standard mark-to-market accounting and zero
+interest, the cumulative gain from $t$ to $T$ is $F_T - F_t$.
+\item Hold a cash amount of $(F_t-K)$ from $t$ to $T$ (no growth under zero discounting).
+\end{itemize}
+The terminal value of this self-financing strategy is
+\[
+(F_t-K) + (F_T-F_t) = F_T - K,
+\]
+which matches the desired payoff. Hence the no-arbitrage time-$t$ value of the claim $F_T-K$ equals
+the initial cost of this replicating strategy, namely $F_t-K$:
+\begin{equation}
+C_t(K,T) - P_t(K,T) = F_t - K.
+\label{eq:pcp_usd_futures}
+\end{equation}
+
+\subsection*{C.3 Parity in futures-numeraire (coin) units}
+Define the futures-numeraire (coin) prices
+\[
+\widehat C_t(K,T) := \frac{C_t(K,T)}{F_t},
+\qquad
+\widehat P_t(K,T) := \frac{P_t(K,T)}{F_t}.
+\]
+Dividing \eqref{eq:pcp_usd_futures} by $F_t$ gives
+\begin{equation}
+\boxed{
+\widehat C_t(K,T) - \widehat P_t(K,T)
+=
+\frac{F_t-K}{F_t}
+=
+1-\frac{K}{F_t},}
+\label{eq:pcp_futures_numeraire_proved}
+\end{equation}
+which is exactly the parity stated in \eqref{eq:pcp_futures_numeraire}.
+
+
+
+
+
+\end{document}
