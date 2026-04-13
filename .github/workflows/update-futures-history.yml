@@ -3,7 +3,7 @@ name: update-futures-history
 on:
   workflow_dispatch:
   schedule:
-    - cron: "11 7 * * *"   # 10:00 Moscow time (UTC+3)
+    - cron: "11 9 * * *"   # 10:00 Moscow time (UTC+3)
 
 permissions:
   contents: write
