@@ -173,7 +173,7 @@ def import_module_from_path(name: str, path: Path):
 def resolve_default_paths(
     reg_val: int = 100,
     notebook_dir: Path | None = None,
-    output_filename: str = "hedging_results_plotly.xlsx",
+    output_filename: str = "hedging_results.xlsx",
 ) -> AnalysisPaths:
     notebook_dir = Path.cwd().resolve() if notebook_dir is None else Path(notebook_dir).resolve()
     project_root = resolve_project_root(notebook_dir)
@@ -192,10 +192,10 @@ def resolve_default_paths(
         Path("/mnt/data") / "hedging_analysis.py",
     ]
     analytics_candidates = [
-        notebook_dir / "hedging_analytics_plotly.py",
-        project_root / "src" / "hedging_analytics_plotly.py",
-        project_root / "hedging_analytics_plotly.py",
-        Path("/mnt/data") / "hedging_analytics_plotly.py",
+        notebook_dir / "hedging_analytics.py",
+        project_root / "src" / "hedging_analytics.py",
+        project_root / "hedging_analytics.py",
+        Path("/mnt/data") / "hedging_analytics.py",
     ]
     data_candidates = [
         project_root / "data",
@@ -514,6 +514,53 @@ def unhedged_vs_hedged_panel(rep_panel: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _coerce_group_cols(group_cols: str | list[str] | tuple[str, ...]) -> list[str]:
+    if isinstance(group_cols, str):
+        return [group_cols]
+    return list(group_cols)
+
+
+def _ordered_bucket_labels(labels: pd.Series) -> list[str]:
+    vals = [str(x) for x in labels.dropna().unique().tolist()]
+    def _key(x: str):
+        tail = ''.join(ch for ch in x if ch.isdigit())
+        return (int(tail) if tail else 10**9, x)
+    return sorted(vals, key=_key)
+
+
+def add_groupwise_equal_count_buckets(
+    df: pd.DataFrame,
+    value_col: str,
+    group_cols: str | list[str] | tuple[str, ...] = ("currency",),
+    q: int = 5,
+    output_col: str | None = None,
+    label_prefix: str = "Q",
+) -> pd.DataFrame:
+    out = df.copy()
+    output_col = output_col or f"{value_col}_q{q}"
+    out[output_col] = pd.Series(pd.NA, index=out.index, dtype="object")
+    group_cols_list = _coerce_group_cols(group_cols)
+
+    for _, idx in out.groupby(group_cols_list, dropna=False).groups.items():
+        s = pd.to_numeric(out.loc[list(idx), value_col], errors="coerce")
+        valid = s.notna()
+        n_valid = int(valid.sum())
+        if n_valid < q:
+            continue
+        ranks = s[valid].rank(method="first")
+        try:
+            bucket_codes = pd.qcut(ranks, q=q, labels=False, duplicates="drop")
+        except ValueError:
+            continue
+        bucket_codes = pd.Series(bucket_codes, index=s[valid].index)
+        n_bins = int(bucket_codes.nunique())
+        if n_bins == 0:
+            continue
+        labels = {i: f"{label_prefix}{i + 1}" for i in range(n_bins)}
+        out.loc[bucket_codes.index, output_col] = bucket_codes.map(labels).astype("object")
+    return out
+
+
 def add_groupwise_qcut(
     df: pd.DataFrame,
     value_col: str,
@@ -522,21 +569,72 @@ def add_groupwise_qcut(
     output_col: str | None = None,
     label_prefix: str = "Q",
 ) -> pd.DataFrame:
-    out = df.copy()
-    output_col = output_col or f"{value_col}_q{q}"
-    out[output_col] = None
-    for key, idx in out.groupby(group_col, dropna=False).groups.items():
-        s = pd.to_numeric(out.loc[list(idx), value_col], errors="coerce")
-        valid = s.notna()
-        if valid.sum() < q:
-            continue
-        ranks = s[valid].rank(method="first")
-        labels = [f"{label_prefix}{i}" for i in range(1, q + 1)]
-        try:
-            out.loc[s[valid].index, output_col] = pd.qcut(ranks, q=q, labels=labels)
-        except ValueError:
-            pass
-    return out
+    return add_groupwise_equal_count_buckets(
+        df=df,
+        value_col=value_col,
+        group_cols=[group_col],
+        q=q,
+        output_col=output_col,
+        label_prefix=label_prefix,
+    )
+
+
+def build_equal_count_bucket_range_table(
+    df: pd.DataFrame,
+    bucket_col: str,
+    value_col: str,
+    group_cols: str | list[str] | tuple[str, ...] = ("currency",),
+) -> pd.DataFrame:
+    group_cols_list = _coerce_group_cols(group_cols)
+    needed = [*group_cols_list, bucket_col, value_col]
+    missing = [c for c in needed if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for equal-count bucket range table: {missing}")
+    rows = []
+    tmp = df.copy()
+    tmp[value_col] = pd.to_numeric(tmp[value_col], errors="coerce")
+    tmp = tmp[tmp[bucket_col].notna() & tmp[value_col].notna()].copy()
+    if tmp.empty:
+        return pd.DataFrame(columns=[*group_cols_list, bucket_col, "n_intervals", "bucket_min", "bucket_median", "bucket_max"])
+    for keys, g in tmp.groupby([*group_cols_list, bucket_col], dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row = {col: val for col, val in zip([*group_cols_list, bucket_col], keys)}
+        row.update({
+            "n_intervals": int(len(g)),
+            "bucket_min": float(g[value_col].min()),
+            "bucket_median": float(g[value_col].median()),
+            "bucket_max": float(g[value_col].max()),
+        })
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    return out.sort_values([*group_cols_list, bucket_col]).reset_index(drop=True)
+
+
+def build_equal_count_bucket_summary(
+    interval_long: pd.DataFrame,
+    value_col: str,
+    bucket_col: str,
+    q: int = 5,
+    group_cols: str | list[str] | tuple[str, ...] = ("currency",),
+    label_prefix: str = "Q",
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    bucketed = add_groupwise_equal_count_buckets(
+        interval_long,
+        value_col=value_col,
+        group_cols=group_cols,
+        q=q,
+        output_col=bucket_col,
+        label_prefix=label_prefix,
+    )
+    summary_group_cols = [*_coerce_group_cols(group_cols), bucket_col, "hedge_type"]
+    if "model" in bucketed.columns:
+        summary_group_cols.append("model")
+    summary = pooled_summary(bucketed, summary_group_cols)
+    ranges = build_equal_count_bucket_range_table(bucketed, bucket_col=bucket_col, value_col=value_col, group_cols=group_cols)
+    return bucketed, summary, ranges
 
 
 def build_sample_construction(interval_panel: pd.DataFrame) -> pd.DataFrame:
@@ -671,15 +769,24 @@ def figure_ecdf_abs_pnl(rep_series: pd.DataFrame, height: int = 520) -> go.Figur
     plot_df = rep_series.copy()
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title="No representative series data", height=height)
+    plot_df["abs_pnl_coin"] = pd.to_numeric(plot_df["abs_pnl_coin"], errors="coerce")
+    plot_df = plot_df.loc[plot_df["abs_pnl_coin"].notna()].copy()
+    if plot_df.empty:
+        return apply_thesis_layout(go.Figure(), title="No representative series data", height=height)
+
+    positive = plot_df.loc[plot_df["abs_pnl_coin"] > 0, "abs_pnl_coin"]
+    eps = float(positive.min()) * 0.5 if len(positive) else 1e-12
+    plot_df["abs_pnl_coin_logsafe"] = np.where(plot_df["abs_pnl_coin"] > 0, plot_df["abs_pnl_coin"], eps)
+
     fig = px.ecdf(
         plot_df,
-        x="abs_pnl_coin",
+        x="abs_pnl_coin_logsafe",
         color="series",
         facet_col="currency",
         log_x=True,
         category_orders={"series": SERIES_ORDER, "currency": CURRENCY_ORDER},
         color_discrete_map=SERIES_COLORS,
-        labels={"abs_pnl_coin": "Absolute interval PnL in coin terms (log scale)", "series": "Series", "currency": "Currency"},
+        labels={"abs_pnl_coin_logsafe": "Absolute interval PnL in coin terms (log scale)", "series": "Series", "currency": "Currency"},
     )
     return apply_thesis_layout(fig, title="ECDF of absolute interval PnL", height=height)
 
@@ -762,53 +869,114 @@ def figure_basis_by_maturity(interval_long: pd.DataFrame, split: str = "test", h
 
 
 def figure_moneyness_quintile_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
-    plot_df = add_groupwise_qcut(rep_panel, value_col="moneyness_ratio", group_col="currency", q=q, output_col="moneyness_quintile", label_prefix="Q")
-    summary = pooled_summary(plot_df, ["currency", "moneyness_quintile", "hedge_type"])
-    if summary.empty:
-        return apply_thesis_layout(go.Figure(), title="No moneyness quintile data", height=height)
-    summary["hedge_label"] = summary["hedge_type"].map(HEDGE_LABELS).fillna(summary["hedge_type"])
-    summary["text"] = pd.to_numeric(summary[metric], errors="coerce").map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
-    quintiles = [f"Q{i}" for i in range(1, q + 1)]
-    fig = px.bar(
-        summary,
-        x="moneyness_quintile",
-        y=metric,
-        color="hedge_label",
-        facet_col="currency",
-        barmode="group",
-        text="text",
-        category_orders={"moneyness_quintile": quintiles, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
-        color_discrete_map=HEDGE_COLORS,
-        labels={"moneyness_quintile": "Moneyness quintile", metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
-    )
-    fig.update_yaxes(tickformat=".0%")
-    fig.update_traces(textposition="outside", cliponaxis=False)
-    return apply_thesis_layout(fig, title=f"Moneyness-quintile {metric.replace('_', ' ')}", height=height)
+    return figure_equal_count_moneyness_metric(rep_panel, metric=metric, q=q, height=height)
 
 
 def figure_basis_quintile_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
-    plot_df = add_groupwise_qcut(rep_panel, value_col="basis_abs", group_col="currency", q=q, output_col="basis_quintile", label_prefix="Q")
-    summary = pooled_summary(plot_df, ["currency", "basis_quintile", "hedge_type"])
-    if summary.empty:
-        return apply_thesis_layout(go.Figure(), title="No basis quintile data", height=height)
-    summary["hedge_label"] = summary["hedge_type"].map(HEDGE_LABELS).fillna(summary["hedge_type"])
-    summary["text"] = pd.to_numeric(summary[metric], errors="coerce").map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
-    quintiles = [f"Q{i}" for i in range(1, q + 1)]
+    return figure_equal_count_basis_metric(rep_panel, metric=metric, q=q, height=height)
+
+
+def figure_equal_count_bucket_metric(
+    summary_df: pd.DataFrame,
+    bucket_col: str,
+    metric: str = "rmse_reduction",
+    bucket_title: str = "Equal-count bucket",
+    height: int = 520,
+) -> go.Figure:
+    plot_df = summary_df.copy()
+    if plot_df.empty or bucket_col not in plot_df.columns:
+        return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} data", height=height)
+    plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+    plot_df = plot_df[plot_df[bucket_col].notna()].copy()
+    if plot_df.empty:
+        return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} data", height=height)
+    plot_df["hedge_label"] = plot_df["hedge_type"].map(HEDGE_LABELS).fillna(plot_df["hedge_type"])
+    plot_df["text"] = plot_df[metric].map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
+    bucket_order = _ordered_bucket_labels(plot_df[bucket_col])
     fig = px.bar(
-        summary,
-        x="basis_quintile",
+        plot_df,
+        x=bucket_col,
         y=metric,
         color="hedge_label",
         facet_col="currency",
         barmode="group",
         text="text",
-        category_orders={"basis_quintile": quintiles, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
+        category_orders={bucket_col: bucket_order, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
         color_discrete_map=HEDGE_COLORS,
-        labels={"basis_quintile": "Basis quintile", metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
+        labels={bucket_col: bucket_title, metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
+        hover_data={"n_intervals": True},
     )
     fig.update_yaxes(tickformat=".0%")
     fig.update_traces(textposition="outside", cliponaxis=False)
-    return apply_thesis_layout(fig, title=f"Basis-quintile {metric.replace('_', ' ')}", height=height)
+    return apply_thesis_layout(fig, title=f"{bucket_title} {metric.replace('_', ' ')}", height=height)
+
+
+def figure_basis_by_bucket(
+    bucketed_panel: pd.DataFrame,
+    bucket_col: str,
+    bucket_title: str = "Equal-count bucket",
+    height: int = 520,
+) -> go.Figure:
+    plot_df = bucketed_panel.copy()
+    if plot_df.empty or bucket_col not in plot_df.columns:
+        return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
+    plot_df = plot_df[plot_df[bucket_col].notna()].copy()
+    if plot_df.empty:
+        return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
+    rows = []
+    for (currency, bucket), g in plot_df.groupby(["currency", bucket_col], dropna=False):
+        rows.append({
+            "currency": currency,
+            bucket_col: bucket,
+            "median_basis_abs": float(pd.to_numeric(g["basis_abs"], errors="coerce").median()),
+            "n_intervals": int(len(g)),
+        })
+    agg = pd.DataFrame(rows)
+    if agg.empty:
+        return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
+    bucket_order = _ordered_bucket_labels(agg[bucket_col])
+    agg["text"] = agg["median_basis_abs"].map(lambda x: f"{10000*x:.1f} bps" if pd.notna(x) else "")
+    fig = px.bar(
+        agg,
+        x=bucket_col,
+        y="median_basis_abs",
+        color="currency",
+        barmode="group",
+        text="text",
+        category_orders={bucket_col: bucket_order, "currency": CURRENCY_ORDER},
+        labels={bucket_col: bucket_title, "median_basis_abs": "Median absolute perp-term basis", "currency": "Currency"},
+        color_discrete_sequence=["#1f4e79", "#dc2626"],
+        hover_data={"n_intervals": True},
+    )
+    fig.update_yaxes(tickformat=".2%")
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    return apply_thesis_layout(fig, title=f"Median absolute perp-term basis by {bucket_title.lower()}", height=height)
+
+
+def figure_equal_count_maturity_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
+    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
+    if summary.empty:
+        return apply_thesis_layout(go.Figure(), title="No equal-count maturity data", height=height)
+    return figure_equal_count_bucket_metric(summary, bucket_col="maturity_equal_bucket", metric=metric, bucket_title=f"Equal-count maturity bucket (Q={q})", height=height)
+
+
+def figure_basis_by_equal_count_maturity(rep_panel: pd.DataFrame, q: int = 5, height: int = 520) -> go.Figure:
+    bucketed, _, _ = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
+    return figure_basis_by_bucket(bucketed, bucket_col="maturity_equal_bucket", bucket_title=f"Equal-count maturity bucket (Q={q})", height=height)
+
+
+def figure_equal_count_moneyness_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
+    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="moneyness_ratio", bucket_col="moneyness_equal_bucket", q=q, group_cols=("currency",))
+    if summary.empty:
+        return apply_thesis_layout(go.Figure(), title="No equal-count moneyness data", height=height)
+    return figure_equal_count_bucket_metric(summary, bucket_col="moneyness_equal_bucket", metric=metric, bucket_title=f"Equal-count moneyness bucket (Q={q})", height=height)
+
+
+def figure_equal_count_basis_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
+    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="basis_abs", bucket_col="basis_equal_bucket", q=q, group_cols=("currency",))
+    if summary.empty:
+        return apply_thesis_layout(go.Figure(), title="No equal-count basis data", height=height)
+    return figure_equal_count_bucket_metric(summary, bucket_col="basis_equal_bucket", metric=metric, bucket_title=f"Equal-count basis bucket (Q={q})", height=height)
 
 
 def choose_representative_model(headline_test: pd.DataFrame) -> str:
