@@ -162,18 +162,11 @@ def first_existing(paths: list[Path]) -> Path:
 
 
 def import_module_from_path(name: str, path: Path):
-    import sys
-
     spec = importlib.util.spec_from_file_location(name, str(path))
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not import {name} from {path}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    try:
-        spec.loader.exec_module(module)
-    except Exception:
-        sys.modules.pop(name, None)
-        raise
+    spec.loader.exec_module(module)
     return module
 
 
@@ -236,7 +229,6 @@ def resolve_default_paths(
 
 def parse_datetime_like_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    datetime_tokens = ("date", "expiry", "timestamp", "snapshot")
     explicit_datetime_cols = {
         "snapshot_ts",
         "eval_snapshot_ts",
@@ -245,44 +237,18 @@ def parse_datetime_like_columns(df: pd.DataFrame) -> pd.DataFrame:
         "obs_datetime",
         "expiry_datetime",
     }
-    explicit_non_datetime_cols = {
-        "time_to_maturity",
-        "eval_time_to_maturity",
-        "next_time_to_maturity",
-        "dt_years",
-        "dt_hours",
-        "time_to_maturity_days",
-    }
+
     for col in out.columns:
         name = str(col).lower()
-        should_try = (
-            name not in explicit_non_datetime_cols
-            and (
-                name in explicit_datetime_cols
-                or name.endswith("_ts")
-                or any(token in name for token in datetime_tokens)
-            )
+        should_parse = (
+            name in explicit_datetime_cols
+            or name.endswith("_ts")
+            or name.endswith("_datetime")
+            or "timestamp" in name
         )
-        if not should_try:
-            continue
-
-        series = out[col]
-        if pd.api.types.is_datetime64_any_dtype(series):
+        if should_parse:
             try:
-                out[col] = pd.to_datetime(series, utc=True, errors="coerce")
-            except Exception:
-                pass
-            continue
-
-        if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
-            try:
-                parsed = pd.to_datetime(series, utc=True, errors="coerce")
-                non_null_original = int(series.notna().sum())
-                non_null_parsed = int(parsed.notna().sum())
-                if non_null_original == 0:
-                    out[col] = parsed
-                elif non_null_parsed > 0 and non_null_parsed >= max(1, int(0.8 * non_null_original)):
-                    out[col] = parsed
+                out[col] = pd.to_datetime(out[col], utc=True, errors="coerce")
             except Exception:
                 pass
     return out
@@ -344,10 +310,7 @@ def run_engine_with_normalized_perp(
 
 def load_output_workbook(path: Path) -> dict[str, pd.DataFrame]:
     xls = pd.ExcelFile(path, engine="openpyxl")
-    out: dict[str, pd.DataFrame] = {}
-    for sheet in xls.sheet_names:
-        df = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
-        out[sheet] = parse_datetime_like_columns(df)
+    out = {sheet: parse_datetime_like_columns(pd.read_excel(path, sheet_name=sheet, engine="openpyxl")) for sheet in xls.sheet_names}
     return out
 
 
@@ -580,6 +543,76 @@ def _ordered_bucket_labels(labels: pd.Series) -> list[str]:
         tail = ''.join(ch for ch in x if ch.isdigit())
         return (int(tail) if tail else 10**9, x)
     return sorted(vals, key=_key)
+
+
+def _bucket_rank_from_label(label: object) -> int:
+    s = str(label)
+    tail = ''.join(ch for ch in s if ch.isdigit())
+    return int(tail) if tail else 10**9
+
+
+def _format_bucket_range_label(vmin: float, vmax: float, value_kind: str | None = None) -> str:
+    if not (np.isfinite(vmin) and np.isfinite(vmax)):
+        return ""
+    if value_kind == "maturity_days":
+        return f"[{vmin:.1f}, {vmax:.1f}]"
+    if value_kind == "moneyness":
+        return f"[{vmin:.3f}, {vmax:.3f}]"
+    if value_kind == "basis_abs":
+        return f"[{100*vmin:.2f}%, {100*vmax:.2f}%]"
+    return f"[{vmin:.4g}, {vmax:.4g}]"
+
+
+def attach_bucket_range_labels(
+    df: pd.DataFrame,
+    ranges: pd.DataFrame,
+    bucket_col: str,
+    output_col: str | None = None,
+    value_kind: str | None = None,
+) -> pd.DataFrame:
+    out = df.copy()
+    output_col = output_col or f"{bucket_col}_label"
+    if out.empty or bucket_col not in out.columns or ranges.empty:
+        out[output_col] = out.get(bucket_col)
+        return out
+
+    join_cols = [c for c in ["currency", bucket_col] if c in out.columns and c in ranges.columns]
+    if bucket_col not in join_cols:
+        join_cols.append(bucket_col)
+
+    label_map = ranges.copy()
+    label_map[output_col] = [
+        _format_bucket_range_label(vmin, vmax, value_kind=value_kind)
+        for vmin, vmax in zip(
+            pd.to_numeric(label_map["bucket_min"], errors="coerce"),
+            pd.to_numeric(label_map["bucket_max"], errors="coerce"),
+        )
+    ]
+    label_map[f"{bucket_col}__rank"] = label_map[bucket_col].map(_bucket_rank_from_label)
+    keep_cols = [*join_cols, output_col, f"{bucket_col}__rank"]
+    label_map = label_map[keep_cols].drop_duplicates(join_cols, keep="first")
+
+    out = out.merge(label_map, on=join_cols, how="left")
+    out[output_col] = out[output_col].fillna(out[bucket_col].astype(str))
+    if f"{bucket_col}__rank" not in out.columns:
+        out[f"{bucket_col}__rank"] = out[bucket_col].map(_bucket_rank_from_label)
+    else:
+        out[f"{bucket_col}__rank"] = pd.to_numeric(out[f"{bucket_col}__rank"], errors="coerce").fillna(
+            out[bucket_col].map(_bucket_rank_from_label)
+        )
+    return out
+
+
+def _ordered_bucket_display_labels(df: pd.DataFrame, bucket_col: str, label_col: str) -> list[str]:
+    if df.empty or label_col not in df.columns:
+        return []
+    tmp = df[[c for c in [bucket_col, label_col, f"{bucket_col}__rank"] if c in df.columns]].dropna(subset=[label_col]).copy()
+    if tmp.empty:
+        return []
+    if f"{bucket_col}__rank" not in tmp.columns:
+        tmp[f"{bucket_col}__rank"] = tmp[bucket_col].map(_bucket_rank_from_label)
+    tmp = tmp.sort_values([f"{bucket_col}__rank", label_col]).drop_duplicates(label_col, keep="first")
+    return tmp[label_col].astype(str).tolist()
 
 
 def add_groupwise_equal_count_buckets(
@@ -936,6 +969,7 @@ def figure_equal_count_bucket_metric(
     metric: str = "rmse_reduction",
     bucket_title: str = "Equal-count bucket",
     height: int = 520,
+    bucket_label_col: str | None = None,
 ) -> go.Figure:
     plot_df = summary_df.copy()
     if plot_df.empty or bucket_col not in plot_df.columns:
@@ -946,18 +980,19 @@ def figure_equal_count_bucket_metric(
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} data", height=height)
     plot_df["hedge_label"] = plot_df["hedge_type"].map(HEDGE_LABELS).fillna(plot_df["hedge_type"])
     plot_df["text"] = plot_df[metric].map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
-    bucket_order = _ordered_bucket_labels(plot_df[bucket_col])
+    x_col = bucket_label_col if bucket_label_col and bucket_label_col in plot_df.columns else bucket_col
+    bucket_order = _ordered_bucket_display_labels(plot_df, bucket_col=bucket_col, label_col=x_col) if x_col != bucket_col else _ordered_bucket_labels(plot_df[bucket_col])
     fig = px.bar(
         plot_df,
-        x=bucket_col,
+        x=x_col,
         y=metric,
         color="hedge_label",
         facet_col="currency",
         barmode="group",
         text="text",
-        category_orders={bucket_col: bucket_order, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
+        category_orders={x_col: bucket_order, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
         color_discrete_map=HEDGE_COLORS,
-        labels={bucket_col: bucket_title, metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
+        labels={x_col: bucket_title, metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
         hover_data={"n_intervals": True},
     )
     fig.update_yaxes(tickformat=".0%")
@@ -970,6 +1005,7 @@ def figure_basis_by_bucket(
     bucket_col: str,
     bucket_title: str = "Equal-count bucket",
     height: int = 520,
+    bucket_label_col: str | None = None,
 ) -> go.Figure:
     plot_df = bucketed_panel.copy()
     if plot_df.empty or bucket_col not in plot_df.columns:
@@ -978,27 +1014,42 @@ def figure_basis_by_bucket(
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
     rows = []
-    for (currency, bucket), g in plot_df.groupby(["currency", bucket_col], dropna=False):
-        rows.append({
-            "currency": currency,
-            bucket_col: bucket,
+    group_keys = ["currency", bucket_col]
+    if bucket_label_col and bucket_label_col in plot_df.columns:
+        group_keys.append(bucket_label_col)
+    if f"{bucket_col}__rank" in plot_df.columns:
+        group_keys.append(f"{bucket_col}__rank")
+    for keys, g in plot_df.groupby(group_keys, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row = {
+            "currency": keys[0],
+            bucket_col: keys[1],
             "median_basis_abs": float(pd.to_numeric(g["basis_abs"], errors="coerce").median()),
             "n_intervals": int(len(g)),
-        })
+        }
+        if bucket_label_col and bucket_label_col in plot_df.columns:
+            row[bucket_label_col] = keys[2]
+            if f"{bucket_col}__rank" in plot_df.columns:
+                row[f"{bucket_col}__rank"] = keys[3]
+        elif f"{bucket_col}__rank" in plot_df.columns:
+            row[f"{bucket_col}__rank"] = keys[2]
+        rows.append(row)
     agg = pd.DataFrame(rows)
     if agg.empty:
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
-    bucket_order = _ordered_bucket_labels(agg[bucket_col])
+    x_col = bucket_label_col if bucket_label_col and bucket_label_col in agg.columns else bucket_col
+    bucket_order = _ordered_bucket_display_labels(agg, bucket_col=bucket_col, label_col=x_col) if x_col != bucket_col else _ordered_bucket_labels(agg[bucket_col])
     agg["text"] = agg["median_basis_abs"].map(lambda x: f"{10000*x:.1f} bps" if pd.notna(x) else "")
     fig = px.bar(
         agg,
-        x=bucket_col,
+        x=x_col,
         y="median_basis_abs",
         color="currency",
         barmode="group",
         text="text",
-        category_orders={bucket_col: bucket_order, "currency": CURRENCY_ORDER},
-        labels={bucket_col: bucket_title, "median_basis_abs": "Median absolute perp-term basis", "currency": "Currency"},
+        category_orders={x_col: bucket_order, "currency": CURRENCY_ORDER},
+        labels={x_col: bucket_title, "median_basis_abs": "Median absolute perp-term basis", "currency": "Currency"},
         color_discrete_sequence=["#1f4e79", "#dc2626"],
         hover_data={"n_intervals": True},
     )
@@ -1008,22 +1059,45 @@ def figure_basis_by_bucket(
 
 
 def figure_equal_count_maturity_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
-    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
+    _, summary, ranges = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
     if summary.empty:
         return apply_thesis_layout(go.Figure(), title="No equal-count maturity data", height=height)
-    return figure_equal_count_bucket_metric(summary, bucket_col="maturity_equal_bucket", metric=metric, bucket_title=f"Equal-count maturity bucket (Q={q})", height=height)
+    summary = attach_bucket_range_labels(summary, ranges, bucket_col="maturity_equal_bucket", output_col="maturity_equal_bucket_label", value_kind="maturity_days")
+    return figure_equal_count_bucket_metric(
+        summary,
+        bucket_col="maturity_equal_bucket",
+        bucket_label_col="maturity_equal_bucket_label",
+        metric=metric,
+        bucket_title="Maturity range (days)",
+        height=height,
+    )
 
 
 def figure_basis_by_equal_count_maturity(rep_panel: pd.DataFrame, q: int = 5, height: int = 520) -> go.Figure:
-    bucketed, _, _ = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
-    return figure_basis_by_bucket(bucketed, bucket_col="maturity_equal_bucket", bucket_title=f"Equal-count maturity bucket (Q={q})", height=height)
+    bucketed, _, ranges = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
+    bucketed = attach_bucket_range_labels(bucketed, ranges, bucket_col="maturity_equal_bucket", output_col="maturity_equal_bucket_label", value_kind="maturity_days")
+    return figure_basis_by_bucket(
+        bucketed,
+        bucket_col="maturity_equal_bucket",
+        bucket_label_col="maturity_equal_bucket_label",
+        bucket_title="Maturity range (days)",
+        height=height,
+    )
 
 
 def figure_equal_count_moneyness_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
-    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="moneyness_ratio", bucket_col="moneyness_equal_bucket", q=q, group_cols=("currency",))
+    _, summary, ranges = build_equal_count_bucket_summary(rep_panel, value_col="moneyness_ratio", bucket_col="moneyness_equal_bucket", q=q, group_cols=("currency",))
     if summary.empty:
         return apply_thesis_layout(go.Figure(), title="No equal-count moneyness data", height=height)
-    return figure_equal_count_bucket_metric(summary, bucket_col="moneyness_equal_bucket", metric=metric, bucket_title=f"Equal-count moneyness bucket (Q={q})", height=height)
+    summary = attach_bucket_range_labels(summary, ranges, bucket_col="moneyness_equal_bucket", output_col="moneyness_equal_bucket_label", value_kind="moneyness")
+    return figure_equal_count_bucket_metric(
+        summary,
+        bucket_col="moneyness_equal_bucket",
+        bucket_label_col="moneyness_equal_bucket_label",
+        metric=metric,
+        bucket_title="Moneyness range (K/F)",
+        height=height,
+    )
 
 
 def figure_equal_count_basis_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
