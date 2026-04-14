@@ -555,9 +555,9 @@ def _format_bucket_range_label(vmin: float, vmax: float, value_kind: str | None 
     if not (np.isfinite(vmin) and np.isfinite(vmax)):
         return ""
     if value_kind == "maturity_days":
-        return f"[{vmin:.1f}, {vmax:.1f}]"
+        return f"{vmin:.1f}–{vmax:.1f}d"
     if value_kind == "moneyness":
-        return f"[{vmin:.3f}, {vmax:.3f}]"
+        return f"{vmin:.3f}–{vmax:.3f} K/F"
     if value_kind == "basis_abs":
         return f"[{100*vmin:.2f}%, {100*vmax:.2f}%]"
     return f"[{vmin:.4g}, {vmax:.4g}]"
