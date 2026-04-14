@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 import importlib.util
 import math
+import sys
 import warnings
 
 import numpy as np
@@ -166,7 +167,15 @@ def import_module_from_path(name: str, path: Path):
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not import {name} from {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Register before execution so decorators (e.g., @dataclass) can resolve
+    # module-level symbols through sys.modules during import-time introspection.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        # Avoid keeping a half-initialized module cached under this alias.
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
