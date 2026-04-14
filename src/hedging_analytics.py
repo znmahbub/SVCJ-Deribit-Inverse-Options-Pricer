@@ -162,11 +162,18 @@ def first_existing(paths: list[Path]) -> Path:
 
 
 def import_module_from_path(name: str, path: Path):
+    import sys
+
     spec = importlib.util.spec_from_file_location(name, str(path))
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not import {name} from {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
