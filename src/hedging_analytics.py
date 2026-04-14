@@ -236,14 +236,55 @@ def resolve_default_paths(
 
 def parse_datetime_like_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    datetime_tokens = ("date", "expiry", "timestamp", "snapshot")
+    explicit_datetime_cols = {
+        "snapshot_ts",
+        "eval_snapshot_ts",
+        "next_snapshot_ts",
+        "timestamp",
+        "obs_datetime",
+        "expiry_datetime",
+    }
+    explicit_non_datetime_cols = {
+        "time_to_maturity",
+        "eval_time_to_maturity",
+        "next_time_to_maturity",
+        "dt_years",
+        "dt_hours",
+        "time_to_maturity_days",
+    }
     for col in out.columns:
-        if out[col].dtype == object:
-            name = str(col).lower()
-            if any(token in name for token in ["time", "date", "expiry", "timestamp"]):
-                try:
-                    out[col] = pd.to_datetime(out[col], utc=True, errors="ignore")
-                except Exception:
-                    pass
+        name = str(col).lower()
+        should_try = (
+            name not in explicit_non_datetime_cols
+            and (
+                name in explicit_datetime_cols
+                or name.endswith("_ts")
+                or any(token in name for token in datetime_tokens)
+            )
+        )
+        if not should_try:
+            continue
+
+        series = out[col]
+        if pd.api.types.is_datetime64_any_dtype(series):
+            try:
+                out[col] = pd.to_datetime(series, utc=True, errors="coerce")
+            except Exception:
+                pass
+            continue
+
+        if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            try:
+                parsed = pd.to_datetime(series, utc=True, errors="coerce")
+                non_null_original = int(series.notna().sum())
+                non_null_parsed = int(parsed.notna().sum())
+                if non_null_original == 0:
+                    out[col] = parsed
+                elif non_null_parsed > 0 and non_null_parsed >= max(1, int(0.8 * non_null_original)):
+                    out[col] = parsed
+            except Exception:
+                pass
     return out
 
 
@@ -303,7 +344,10 @@ def run_engine_with_normalized_perp(
 
 def load_output_workbook(path: Path) -> dict[str, pd.DataFrame]:
     xls = pd.ExcelFile(path, engine="openpyxl")
-    out = {sheet: parse_datetime_like_columns(pd.read_excel(path, sheet_name=sheet, engine="openpyxl")) for sheet in xls.sheet_names}
+    out: dict[str, pd.DataFrame] = {}
+    for sheet in xls.sheet_names:
+        df = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+        out[sheet] = parse_datetime_like_columns(df)
     return out
 
 
@@ -338,6 +382,9 @@ def ensure_analysis_columns(panel: pd.DataFrame) -> pd.DataFrame:
         ).astype("object")
 
     out["dt_hours"] = pd.to_numeric(out.get("dt_hours"), errors="coerce")
+    if {"snapshot_ts", "eval_snapshot_ts"}.issubset(out.columns):
+        out["snapshot_ts"] = pd.to_datetime(out["snapshot_ts"], utc=True, errors="coerce")
+        out["eval_snapshot_ts"] = pd.to_datetime(out["eval_snapshot_ts"], utc=True, errors="coerce")
     if out["dt_hours"].isna().all() and {"snapshot_ts", "eval_snapshot_ts"}.issubset(out.columns):
         out["dt_hours"] = (out["eval_snapshot_ts"] - out["snapshot_ts"]).dt.total_seconds() / 3600.0
 
