@@ -16,6 +16,13 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 from src.calibration import _build_pricing_plan, _price_with_plan
 from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj
+from src.results_store import (
+    PARAM_SHEET_BLACK,
+    PARAM_SHEET_HESTON,
+    PARAM_SHEET_SVCJ,
+    TEST_SHEET,
+    TRAIN_SHEET,
+)
 
 try:
     from tqdm.auto import tqdm
@@ -26,9 +33,9 @@ except Exception:  # pragma: no cover
 MODELS = ("black", "heston", "svcj")
 HEDGE_TYPES = ("delta", "net_delta")
 PARAM_SHEETS = {
-    "black": "black_params",
-    "heston": "heston_params",
-    "svcj": "svcj_params",
+    "black": PARAM_SHEET_BLACK,
+    "heston": PARAM_SHEET_HESTON,
+    "svcj": PARAM_SHEET_SVCJ,
 }
 PRICE_COLS = {
     "black": "price_black",
@@ -145,13 +152,13 @@ def _norm_cdf(x: np.ndarray | float) -> np.ndarray | float:
 
 
 def load_calibration_workbook(path: Path) -> dict[str, pd.DataFrame]:
-    needed = [*PARAM_SHEETS.values(), "train_data", "test_data"]
+    needed = [*PARAM_SHEETS.values(), TRAIN_SHEET, TEST_SHEET]
     return {sheet: pd.read_excel(path, sheet_name=sheet, engine="openpyxl") for sheet in needed}
 
 
 def combine_option_sheets(workbook: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    train = workbook["train_data"].copy()
-    test = workbook["test_data"].copy()
+    train = workbook[TRAIN_SHEET].copy()
+    test = workbook[TEST_SHEET].copy()
     train["split"] = "train"
     test["split"] = "test"
     df = pd.concat([train, test], ignore_index=True, sort=False)
@@ -739,8 +746,8 @@ def make_summary_tables_from_panel(panel: pd.DataFrame) -> dict[str, pd.DataFram
 
 
 def prepare_output_option_sheets(options: pd.DataFrame, workbook: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    base_train_cols = list(workbook["train_data"].columns)
-    base_test_cols = list(workbook["test_data"].columns)
+    base_train_cols = list(workbook[TRAIN_SHEET].columns)
+    base_test_cols = list(workbook[TEST_SHEET].columns)
     enriched = options.copy()
     train = enriched[enriched["split"] == "train"].copy()
     test = enriched[enriched["split"] == "test"].copy()
@@ -822,8 +829,8 @@ def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], t
         ("black_params", workbook["black_params"].copy()),
         ("heston_params", workbook["heston_params"].copy()),
         ("svcj_params", workbook["svcj_params"].copy()),
-        ("train_data", train_data),
-        ("test_data", test_data),
+        (TRAIN_SHEET, train_data),
+        (TEST_SHEET, test_data),
         ("hedge_interval_panel", interval_panel),
         ("hedge_summary_overall", summary_tables["hedge_summary_overall"]),
         ("hedge_summary_by_timestamp", summary_tables["hedge_summary_by_timestamp"]),
@@ -897,8 +904,8 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
         outer.update(1)
 
         return {
-            "train_data": train_data,
-            "test_data": test_data,
+            TRAIN_SHEET: train_data,
+            TEST_SHEET: test_data,
             "price_verification": price_verification,
             "hedge_interval_panel": interval_panel,
             **summary_tables,

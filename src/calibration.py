@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from .inverse_fft_pricer import FFTParams, price_inverse_option, _cached_pricing_grid
+from .inverse_fft_pricer import FFTParams, center_fft_params_on_strikes, price_inverse_option, _cached_pricing_grid
 
 
 # -----------------------------
@@ -173,12 +173,7 @@ def filter_liquid_options(
 
 def _choose_fft_params_for_group(base: FFTParams, strikes: np.ndarray) -> FFTParams:
     """Create FFTParams with `b` centered around the group's strikes."""
-    N = base.N
-    eta = base.eta
-    lam = 2.0 * np.pi / (N * eta)
-    logK_center = float(np.log(np.median(strikes)))
-    b = logK_center - 0.5 * N * lam
-    return FFTParams(N=base.N, alpha=base.alpha, eta=base.eta, b=b, use_simpson=base.use_simpson)
+    return center_fft_params_on_strikes(base, strikes)
 
 
 

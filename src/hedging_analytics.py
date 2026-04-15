@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,39 +36,33 @@ if PLOTLY_TEMPLATE_NAME not in pio.templates:
         paper_bgcolor="white",
         plot_bgcolor="white",
         colorway=["#1f4e79", "#dc2626", "#2f7d32", "#7f8c8d", "#9467bd"],
-        font=dict(family="Arial, Helvetica, sans-serif", size=14, color="#1f2937"),
-        title=dict(font=dict(size=20, color="#111827"), x=0.02, xanchor="left"),
+        font=dict(family="Arial, Helvetica, sans-serif", size=13, color="#1f2937"),
+        title=dict(font=dict(size=20, color="#111827"), x=0.5, xanchor="center"),
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
-            xanchor="right",
-            x=1.0,
-            bgcolor="rgba(255,255,255,0.8)",
-            bordercolor="rgba(0,0,0,0.08)",
-            borderwidth=1,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255,255,255,0.85)",
         ),
-        margin=dict(l=70, r=30, t=90, b=60),
+        margin=dict(l=60, r=40, t=80, b=60),
         xaxis=dict(
-            showgrid=False,
-            showline=True,
-            linewidth=1.0,
-            linecolor="#D1D5DB",
-            ticks="outside",
-            tickcolor="#D1D5DB",
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.08)",
+            showline=False,
             zeroline=False,
+            automargin=True,
         ),
         yaxis=dict(
             showgrid=True,
-            gridcolor="rgba(17,24,39,0.08)",
-            showline=True,
-            linewidth=1.0,
-            linecolor="#D1D5DB",
-            ticks="outside",
-            tickcolor="#D1D5DB",
+            gridcolor="rgba(0,0,0,0.08)",
+            showline=False,
             zeroline=False,
+            automargin=True,
         ),
         hoverlabel=dict(font=dict(size=13)),
+        bargap=0.18,
     )
     pio.templates[PLOTLY_TEMPLATE_NAME] = thesis_template
 
@@ -560,16 +553,36 @@ def _bucket_rank_from_label(label: object) -> int:
     return int(tail) if tail else 10**9
 
 
-def _format_bucket_range_label(vmin: float, vmax: float, value_kind: str | None = None) -> str:
+
+def _format_bucket_range_label(
+    vmin: float,
+    vmax: float,
+    vmid: float | None = None,
+    value_kind: str | None = None,
+) -> str:
     if not (np.isfinite(vmin) and np.isfinite(vmax)):
         return ""
     if value_kind == "maturity_days":
-        return f"{vmin:.1f}–{vmax:.1f}d"
+        low = int(round(vmin))
+        high = int(round(vmax))
+        label = f"{low}–{high}d"
+        if vmid is not None and np.isfinite(vmid):
+            label += f"<br>(med {int(round(vmid))}d)"
+        return label
     if value_kind == "moneyness":
-        return f"{vmin:.3f}–{vmax:.3f} K/F"
+        label = f"{vmin:.2f}–{vmax:.2f}"
+        if vmid is not None and np.isfinite(vmid):
+            label += f"<br>(med {vmid:.2f})"
+        return label
     if value_kind == "basis_abs":
-        return f"[{100*vmin:.2f}%, {100*vmax:.2f}%]"
-    return f"[{vmin:.4g}, {vmax:.4g}]"
+        label = f"{100 * vmin:.2f}–{100 * vmax:.2f}%"
+        if vmid is not None and np.isfinite(vmid):
+            label += f"<br>(med {100 * vmid:.2f}%)"
+        return label
+    label = f"[{vmin:.4g}, {vmax:.4g}]"
+    if vmid is not None and np.isfinite(vmid):
+        label += f"<br>(med {vmid:.4g})"
+    return label
 
 
 def attach_bucket_range_labels(
@@ -591,10 +604,11 @@ def attach_bucket_range_labels(
 
     label_map = ranges.copy()
     label_map[output_col] = [
-        _format_bucket_range_label(vmin, vmax, value_kind=value_kind)
-        for vmin, vmax in zip(
+        _format_bucket_range_label(vmin, vmax, vmid, value_kind=value_kind)
+        for vmin, vmax, vmid in zip(
             pd.to_numeric(label_map["bucket_min"], errors="coerce"),
             pd.to_numeric(label_map["bucket_max"], errors="coerce"),
+            pd.to_numeric(label_map["bucket_median"], errors="coerce"),
         )
     ]
     label_map[f"{bucket_col}__rank"] = label_map[bucket_col].map(_bucket_rank_from_label)
@@ -610,7 +624,6 @@ def attach_bucket_range_labels(
             out[bucket_col].map(_bucket_rank_from_label)
         )
     return out
-
 
 def _ordered_bucket_display_labels(df: pd.DataFrame, bucket_col: str, label_col: str) -> list[str]:
     if df.empty or label_col not in df.columns:
@@ -794,13 +807,73 @@ def display_ready(df: pd.DataFrame, percent_cols: list[str] | None = None, round
     return out
 
 
-def apply_thesis_layout(fig: go.Figure, title: str | None = None, height: int = 520, width: int | None = None) -> go.Figure:
-    fig.update_layout(template=PLOTLY_TEMPLATE_NAME, height=height, width=width)
-    if title is not None:
-        fig.update_layout(title=title)
-    fig.update_annotations(font=dict(size=13, color="#374151"))
+
+def _finalize_facet_labels(fig: go.Figure) -> go.Figure:
+    for ann in fig.layout.annotations or []:
+        if isinstance(ann.text, str) and "=" in ann.text:
+            ann.text = ann.text.split("=", 1)[1]
     return fig
 
+
+def _apply_axis_label_formatting(fig: go.Figure, *, y_percent: bool = False, tickangle: int = 0) -> go.Figure:
+    fig.update_xaxes(
+        tickangle=tickangle,
+        automargin=True,
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.08)",
+        zeroline=False,
+    )
+    fig.update_yaxes(
+        automargin=True,
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.08)",
+        zeroline=False,
+    )
+    if y_percent:
+        fig.update_yaxes(tickformat=".0%")
+    return fig
+
+
+def _make_currency_subplot_titles() -> tuple[str, str]:
+    return ("BTC", "ETH")
+
+
+def _bucket_order(plot_df: pd.DataFrame, bucket_col: str, x_col: str) -> list[str]:
+    if x_col != bucket_col:
+        return _ordered_bucket_display_labels(plot_df, bucket_col=bucket_col, label_col=x_col)
+    return _ordered_bucket_labels(plot_df[bucket_col])
+
+
+
+def apply_thesis_layout(
+    fig: go.Figure,
+    title: str | None = None,
+    height: int = 520,
+    width: int | None = None,
+    *,
+    legend_y: float = 1.02,
+    hovermode: str | None = "x unified",
+) -> go.Figure:
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE_NAME,
+        height=height,
+        width=width,
+        hovermode=hovermode,
+        margin=dict(l=60, r=40, t=80, b=60),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=legend_y,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255,255,255,0.85)",
+        ),
+        font=dict(size=13),
+    )
+    if title is not None:
+        fig.update_layout(title={"text": title, "x": 0.5, "xanchor": "center"})
+    fig.update_annotations(font=dict(size=13, color="#374151"))
+    return fig
 
 def figure_pooled_metric(summary_df: pd.DataFrame, metric: str = "rmse_reduction", split: str = "test", height: int = 520) -> go.Figure:
     plot_df = summary_df.copy()
@@ -825,6 +898,8 @@ def figure_pooled_metric(summary_df: pd.DataFrame, metric: str = "rmse_reduction
     )
     fig.update_yaxes(tickformat=".0%")
     fig.update_traces(textposition="outside", cliponaxis=False)
+    _finalize_facet_labels(fig)
+    _apply_axis_label_formatting(fig, y_percent=True, tickangle=0)
     return apply_thesis_layout(fig, title=f"Test-sample pooled {metric.replace('_', ' ')}", height=height)
 
 
@@ -858,6 +933,7 @@ def figure_snapshot_metric(summary_ts: pd.DataFrame, metric: str = "rmse_reducti
             )
         )
     fig.update_yaxes(tickformat=".0%")
+    _apply_axis_label_formatting(fig, y_percent=True, tickangle=0)
     return apply_thesis_layout(fig, title=f"Snapshot-level {metric.replace('_', ' ')} — {MODEL_LABELS.get(representative_model, representative_model.title())} + {HEDGE_LABELS.get(hedge_type, hedge_type)}", height=height)
 
 
@@ -884,6 +960,8 @@ def figure_ecdf_abs_pnl(rep_series: pd.DataFrame, height: int = 520) -> go.Figur
         color_discrete_map=SERIES_COLORS,
         labels={"abs_pnl_coin_logsafe": "Absolute interval PnL in coin terms (log scale)", "series": "Series", "currency": "Currency"},
     )
+    _finalize_facet_labels(fig)
+    _apply_axis_label_formatting(fig, y_percent=False, tickangle=0)
     return apply_thesis_layout(fig, title="ECDF of absolute interval PnL", height=height)
 
 
@@ -908,61 +986,144 @@ def figure_tail_comparison(rep_series: pd.DataFrame, height: int = 700) -> go.Fi
         labels={"series": "Series", "coin_value": "Coin PnL", "currency": "Currency", "metric": ""},
     )
     fig.update_layout(showlegend=False)
+    _finalize_facet_labels(fig)
+    _apply_axis_label_formatting(fig, y_percent=False, tickangle=0)
     return apply_thesis_layout(fig, title="Tail-risk comparison", height=height)
 
 
-def figure_maturity_metric(summary_df: pd.DataFrame, metric: str = "rmse_reduction", representative_model: str = "black", split: str = "test", height: int = 520) -> go.Figure:
+
+def figure_maturity_metric(summary_df: pd.DataFrame, metric: str = "rmse_reduction", representative_model: str = "black", split: str = "test", height: int = 560) -> go.Figure:
     plot_df = summary_df.copy()
     if "split" in plot_df.columns:
         plot_df = plot_df[plot_df["split"].astype(str).str.lower() == split].copy()
     plot_df = plot_df[plot_df["model"].astype(str).str.lower() == representative_model].copy()
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title="No maturity summary data", height=height)
+
+    maturity_label_map = {
+        "0-7d": "0–7d",
+        "7-14d": "7–14d",
+        "14-30d": "14–30d",
+        "30-90d": "30–90d",
+        "90d+": "90d+",
+    }
+    plot_df["maturity_bucket_label"] = plot_df["maturity_bucket"].map(maturity_label_map).fillna(plot_df["maturity_bucket"].astype(str))
     plot_df["hedge_label"] = plot_df["hedge_type"].map(HEDGE_LABELS).fillna(plot_df["hedge_type"])
     plot_df["text"] = pd.to_numeric(plot_df[metric], errors="coerce").map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
-    fig = px.bar(
-        plot_df,
-        x="maturity_bucket",
-        y=metric,
-        color="hedge_label",
-        facet_col="currency",
-        barmode="group",
-        text="text",
-        hover_data={"n_intervals": True},
-        category_orders={"maturity_bucket": MATURITY_ORDER, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
-        color_discrete_map=HEDGE_COLORS,
-        labels={"maturity_bucket": "Maturity bucket", metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+        subplot_titles=_make_currency_subplot_titles(),
     )
-    fig.update_yaxes(tickformat=".0%")
-    fig.update_traces(textposition="outside", cliponaxis=False)
-    return apply_thesis_layout(fig, title=f"Maturity-bucket {metric.replace('_', ' ')} — {MODEL_LABELS.get(representative_model, representative_model.title())}", height=height)
+    for row_idx, currency in enumerate(CURRENCY_ORDER, start=1):
+        frame = plot_df[plot_df["currency"] == currency].copy()
+        if frame.empty:
+            continue
+        for hedge_type in HEDGE_ORDER:
+            sub = frame[frame["hedge_type"] == hedge_type].copy()
+            sub["maturity_rank"] = sub["maturity_bucket"].map(lambda x: MATURITY_ORDER.index(x) if x in MATURITY_ORDER else 10**9)
+            sub = sub.sort_values("maturity_rank")
+            if sub.empty:
+                continue
+            fig.add_trace(
+                go.Bar(
+                    x=sub["maturity_bucket_label"],
+                    y=sub[metric],
+                    name=HEDGE_LABELS.get(hedge_type, hedge_type),
+                    legendgroup=hedge_type,
+                    showlegend=(row_idx == 1),
+                    marker_color=HEDGE_COLORS[HEDGE_LABELS.get(hedge_type, hedge_type)],
+                    text=sub["text"],
+                    textposition="outside",
+                    cliponaxis=False,
+                    customdata=np.column_stack([sub["n_intervals"]]),
+                    hovertemplate="Maturity bucket: %{x}<br>" + metric.replace("_", " ").title() + "=%{y:.1%}<br>n=%{customdata[0]}<extra></extra>",
+                ),
+                row=row_idx,
+                col=1,
+            )
+        fig.update_yaxes(title_text=metric.replace("_", " ").title(), tickformat=".0%", row=row_idx, col=1)
+
+    fig.update_layout(barmode="group")
+    _apply_axis_label_formatting(fig, y_percent=True, tickangle=0)
+    return apply_thesis_layout(
+        fig,
+        title=f"Maturity-bucket {metric.replace('_', ' ')} — {MODEL_LABELS.get(representative_model, representative_model.title())}",
+        height=height,
+    )
 
 
-def figure_basis_by_maturity(interval_long: pd.DataFrame, split: str = "test", height: int = 520) -> go.Figure:
+def figure_basis_by_maturity(interval_long: pd.DataFrame, split: str = "test", height: int = 560) -> go.Figure:
     plot_df = interval_long.copy()
-    plot_df = plot_df[(plot_df["split"].astype(str).str.lower() == split) & (plot_df["hedge_type"].astype(str).str.lower() == "net_delta") & (plot_df["model"].astype(str).str.lower() == "black")].copy()
+    plot_df = plot_df[
+        (plot_df["split"].astype(str).str.lower() == split)
+        & (plot_df["hedge_type"].astype(str).str.lower() == "net_delta")
+        & (plot_df["model"].astype(str).str.lower() == "black")
+    ].copy()
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title="No basis data", height=height)
+
+    maturity_label_map = {
+        "0-7d": "0–7d",
+        "7-14d": "7–14d",
+        "14-30d": "14–30d",
+        "30-90d": "30–90d",
+        "90d+": "90d+",
+    }
     rows = []
     for (currency, maturity_bucket), g in plot_df.groupby(["currency", "maturity_bucket"], dropna=False):
-        rows.append({"currency": currency, "maturity_bucket": maturity_bucket, "median_basis_abs": float(pd.to_numeric(g["basis_abs"], errors="coerce").median()), "n_intervals": int(len(g))})
+        rows.append(
+            {
+                "currency": currency,
+                "maturity_bucket": maturity_bucket,
+                "maturity_bucket_label": maturity_label_map.get(str(maturity_bucket), str(maturity_bucket)),
+                "median_basis_abs": float(pd.to_numeric(g["basis_abs"], errors="coerce").median()),
+                "n_intervals": int(len(g)),
+            }
+        )
     agg = pd.DataFrame(rows)
+    if agg.empty:
+        return apply_thesis_layout(go.Figure(), title="No basis data", height=height)
     agg["text"] = agg["median_basis_abs"].map(lambda x: f"{10000*x:.1f} bps" if pd.notna(x) else "")
-    fig = px.bar(
-        agg,
-        x="maturity_bucket",
-        y="median_basis_abs",
-        color="currency",
-        barmode="group",
-        text="text",
-        category_orders={"maturity_bucket": MATURITY_ORDER, "currency": CURRENCY_ORDER},
-        labels={"maturity_bucket": "Maturity bucket", "median_basis_abs": "Median absolute perp-term basis", "currency": "Currency"},
-        color_discrete_sequence=["#1f4e79", "#dc2626"],
-    )
-    fig.update_yaxes(tickformat=".2%")
-    fig.update_traces(textposition="outside", cliponaxis=False)
-    return apply_thesis_layout(fig, title="Median absolute perp-term basis by maturity bucket", height=height)
 
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+        subplot_titles=_make_currency_subplot_titles(),
+    )
+    for row_idx, currency in enumerate(CURRENCY_ORDER, start=1):
+        frame = agg[agg["currency"] == currency].copy()
+        if frame.empty:
+            continue
+        frame["maturity_rank"] = frame["maturity_bucket"].map(lambda x: MATURITY_ORDER.index(x) if x in MATURITY_ORDER else 10**9)
+        frame = frame.sort_values("maturity_rank")
+        fig.add_trace(
+            go.Bar(
+                x=frame["maturity_bucket_label"],
+                y=frame["median_basis_abs"],
+                name=currency,
+                legendgroup=currency,
+                showlegend=False,
+                marker_color="#1f4e79" if currency == "BTC" else "#dc2626",
+                text=frame["text"],
+                textposition="outside",
+                cliponaxis=False,
+                customdata=np.column_stack([frame["n_intervals"]]),
+                hovertemplate="Maturity bucket: %{x}<br>Median basis=%{y:.2%}<br>n=%{customdata[0]}<extra></extra>",
+            ),
+            row=row_idx,
+            col=1,
+        )
+        fig.update_yaxes(title_text="Median basis", tickformat=".2%", row=row_idx, col=1)
+
+    fig.update_layout(barmode="group")
+    _apply_axis_label_formatting(fig, y_percent=False, tickangle=0)
+    return apply_thesis_layout(fig, title="Median absolute perp-term basis by maturity bucket", height=height)
 
 def figure_moneyness_quintile_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
     return figure_equal_count_moneyness_metric(rep_panel, metric=metric, q=q, height=height)
@@ -972,12 +1133,13 @@ def figure_basis_quintile_metric(rep_panel: pd.DataFrame, metric: str = "rmse_re
     return figure_equal_count_basis_metric(rep_panel, metric=metric, q=q, height=height)
 
 
+
 def figure_equal_count_bucket_metric(
     summary_df: pd.DataFrame,
     bucket_col: str,
     metric: str = "rmse_reduction",
     bucket_title: str = "Equal-count bucket",
-    height: int = 520,
+    height: int = 620,
     bucket_label_col: str | None = None,
 ) -> go.Figure:
     plot_df = summary_df.copy()
@@ -987,25 +1149,50 @@ def figure_equal_count_bucket_metric(
     plot_df = plot_df[plot_df[bucket_col].notna()].copy()
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} data", height=height)
+
     plot_df["hedge_label"] = plot_df["hedge_type"].map(HEDGE_LABELS).fillna(plot_df["hedge_type"])
     plot_df["text"] = plot_df[metric].map(lambda x: f"{100*x:.1f}%" if pd.notna(x) else "")
     x_col = bucket_label_col if bucket_label_col and bucket_label_col in plot_df.columns else bucket_col
-    bucket_order = _ordered_bucket_display_labels(plot_df, bucket_col=bucket_col, label_col=x_col) if x_col != bucket_col else _ordered_bucket_labels(plot_df[bucket_col])
-    fig = px.bar(
-        plot_df,
-        x=x_col,
-        y=metric,
-        color="hedge_label",
-        facet_col="currency",
-        barmode="group",
-        text="text",
-        category_orders={x_col: bucket_order, "hedge_label": ["Delta", "Net delta"], "currency": CURRENCY_ORDER},
-        color_discrete_map=HEDGE_COLORS,
-        labels={x_col: bucket_title, metric: metric.replace("_", " ").title(), "hedge_label": "Hedge type", "currency": "Currency"},
-        hover_data={"n_intervals": True},
+    bucket_order = _bucket_order(plot_df, bucket_col=bucket_col, x_col=x_col)
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+        subplot_titles=_make_currency_subplot_titles(),
     )
-    fig.update_yaxes(tickformat=".0%")
-    fig.update_traces(textposition="outside", cliponaxis=False)
+    for row_idx, currency in enumerate(CURRENCY_ORDER, start=1):
+        frame = plot_df[plot_df["currency"] == currency].copy()
+        if frame.empty:
+            continue
+        frame["__order"] = pd.Categorical(frame[x_col], categories=bucket_order, ordered=True)
+        frame = frame.sort_values(["__order", "hedge_label"])
+        for hedge_type in HEDGE_ORDER:
+            sub = frame[frame["hedge_type"] == hedge_type].copy()
+            if sub.empty:
+                continue
+            fig.add_trace(
+                go.Bar(
+                    x=sub[x_col],
+                    y=sub[metric],
+                    name=HEDGE_LABELS.get(hedge_type, hedge_type),
+                    legendgroup=hedge_type,
+                    showlegend=(row_idx == 1),
+                    marker_color=HEDGE_COLORS[HEDGE_LABELS.get(hedge_type, hedge_type)],
+                    text=sub["text"],
+                    textposition="outside",
+                    cliponaxis=False,
+                    customdata=np.column_stack([sub["n_intervals"]]),
+                    hovertemplate=bucket_title + ": %{x}<br>" + metric.replace("_", " ").title() + "=%{y:.1%}<br>n=%{customdata[0]}<extra></extra>",
+                ),
+                row=row_idx,
+                col=1,
+            )
+        fig.update_yaxes(title_text=metric.replace("_", " ").title(), tickformat=".0%", row=row_idx, col=1)
+
+    fig.update_layout(barmode="group")
+    _apply_axis_label_formatting(fig, y_percent=True, tickangle=0)
     return apply_thesis_layout(fig, title=f"{bucket_title} {metric.replace('_', ' ')}", height=height)
 
 
@@ -1013,7 +1200,7 @@ def figure_basis_by_bucket(
     bucketed_panel: pd.DataFrame,
     bucket_col: str,
     bucket_title: str = "Equal-count bucket",
-    height: int = 520,
+    height: int = 620,
     bucket_label_col: str | None = None,
 ) -> go.Figure:
     plot_df = bucketed_panel.copy()
@@ -1022,6 +1209,7 @@ def figure_basis_by_bucket(
     plot_df = plot_df[plot_df[bucket_col].notna()].copy()
     if plot_df.empty:
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
+
     rows = []
     group_keys = ["currency", bucket_col]
     if bucket_label_col and bucket_label_col in plot_df.columns:
@@ -1037,35 +1225,56 @@ def figure_basis_by_bucket(
             "median_basis_abs": float(pd.to_numeric(g["basis_abs"], errors="coerce").median()),
             "n_intervals": int(len(g)),
         }
+        cursor = 2
         if bucket_label_col and bucket_label_col in plot_df.columns:
-            row[bucket_label_col] = keys[2]
-            if f"{bucket_col}__rank" in plot_df.columns:
-                row[f"{bucket_col}__rank"] = keys[3]
-        elif f"{bucket_col}__rank" in plot_df.columns:
-            row[f"{bucket_col}__rank"] = keys[2]
+            row[bucket_label_col] = keys[cursor]
+            cursor += 1
+        if f"{bucket_col}__rank" in plot_df.columns:
+            row[f"{bucket_col}__rank"] = keys[cursor]
         rows.append(row)
     agg = pd.DataFrame(rows)
     if agg.empty:
         return apply_thesis_layout(go.Figure(), title=f"No {bucket_title.lower()} basis data", height=height)
-    x_col = bucket_label_col if bucket_label_col and bucket_label_col in agg.columns else bucket_col
-    bucket_order = _ordered_bucket_display_labels(agg, bucket_col=bucket_col, label_col=x_col) if x_col != bucket_col else _ordered_bucket_labels(agg[bucket_col])
-    agg["text"] = agg["median_basis_abs"].map(lambda x: f"{10000*x:.1f} bps" if pd.notna(x) else "")
-    fig = px.bar(
-        agg,
-        x=x_col,
-        y="median_basis_abs",
-        color="currency",
-        barmode="group",
-        text="text",
-        category_orders={x_col: bucket_order, "currency": CURRENCY_ORDER},
-        labels={x_col: bucket_title, "median_basis_abs": "Median absolute perp-term basis", "currency": "Currency"},
-        color_discrete_sequence=["#1f4e79", "#dc2626"],
-        hover_data={"n_intervals": True},
-    )
-    fig.update_yaxes(tickformat=".2%")
-    fig.update_traces(textposition="outside", cliponaxis=False)
-    return apply_thesis_layout(fig, title=f"Median absolute perp-term basis by {bucket_title.lower()}", height=height)
 
+    x_col = bucket_label_col if bucket_label_col and bucket_label_col in agg.columns else bucket_col
+    bucket_order = _bucket_order(agg, bucket_col=bucket_col, x_col=x_col)
+    agg["text"] = agg["median_basis_abs"].map(lambda x: f"{10000*x:.1f} bps" if pd.notna(x) else "")
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+        subplot_titles=_make_currency_subplot_titles(),
+    )
+    for row_idx, currency in enumerate(CURRENCY_ORDER, start=1):
+        frame = agg[agg["currency"] == currency].copy()
+        if frame.empty:
+            continue
+        frame["__order"] = pd.Categorical(frame[x_col], categories=bucket_order, ordered=True)
+        frame = frame.sort_values("__order")
+        fig.add_trace(
+            go.Bar(
+                x=frame[x_col],
+                y=frame["median_basis_abs"],
+                name=currency,
+                legendgroup=currency,
+                showlegend=False,
+                marker_color="#1f4e79" if currency == "BTC" else "#dc2626",
+                text=frame["text"],
+                textposition="outside",
+                cliponaxis=False,
+                customdata=np.column_stack([frame["n_intervals"]]),
+                hovertemplate=bucket_title + ": %{x}<br>Median basis=%{y:.2%}<br>n=%{customdata[0]}<extra></extra>",
+            ),
+            row=row_idx,
+            col=1,
+        )
+        fig.update_yaxes(title_text="Median basis", tickformat=".2%", row=row_idx, col=1)
+
+    fig.update_layout(barmode="group")
+    _apply_axis_label_formatting(fig, y_percent=False, tickangle=0)
+    return apply_thesis_layout(fig, title=f"Median absolute perp-term basis by {bucket_title.lower()}", height=height)
 
 def figure_equal_count_maturity_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
     _, summary, ranges = build_equal_count_bucket_summary(rep_panel, value_col="time_to_maturity_days", bucket_col="maturity_equal_bucket", q=q, group_cols=("currency",))
@@ -1110,10 +1319,24 @@ def figure_equal_count_moneyness_metric(rep_panel: pd.DataFrame, metric: str = "
 
 
 def figure_equal_count_basis_metric(rep_panel: pd.DataFrame, metric: str = "rmse_reduction", q: int = 5, height: int = 520) -> go.Figure:
-    _, summary, _ = build_equal_count_bucket_summary(rep_panel, value_col="basis_abs", bucket_col="basis_equal_bucket", q=q, group_cols=("currency",))
+    _, summary, ranges = build_equal_count_bucket_summary(rep_panel, value_col="basis_abs", bucket_col="basis_equal_bucket", q=q, group_cols=("currency",))
     if summary.empty:
         return apply_thesis_layout(go.Figure(), title="No equal-count basis data", height=height)
-    return figure_equal_count_bucket_metric(summary, bucket_col="basis_equal_bucket", metric=metric, bucket_title=f"Equal-count basis bucket (Q={q})", height=height)
+    summary = attach_bucket_range_labels(
+        summary,
+        ranges,
+        bucket_col="basis_equal_bucket",
+        output_col="basis_equal_bucket_label",
+        value_kind="basis_abs",
+    )
+    return figure_equal_count_bucket_metric(
+        summary,
+        bucket_col="basis_equal_bucket",
+        bucket_label_col="basis_equal_bucket_label",
+        metric=metric,
+        bucket_title="Absolute perp-term basis range",
+        height=height,
+    )
 
 
 def choose_representative_model(headline_test: pd.DataFrame) -> str:

@@ -101,6 +101,24 @@ class FFTParams:
         if self.use_simpson and self.N % 2 != 0:
             raise ValueError("N must be even when using Simpson's rule")
 
+
+def center_fft_params_on_strikes(base: FFTParams, strikes: np.ndarray) -> FFTParams:
+    """Return a copy of ``base`` with ``b`` centered around ``median(strikes)``.
+
+    This helper matches the centering rule used throughout the project:
+
+        b = log(median(K)) - 0.5 * N * (2π / (N * η))
+
+    so the log-strike grid is centered on typical strikes for a given expiry.
+    """
+    strikes = np.asarray(strikes)
+    N = base.N
+    eta = base.eta
+    lam = 2.0 * np.pi / (N * eta)
+    logK_center = float(np.log(np.median(strikes)))
+    b = logK_center - 0.5 * N * lam
+    return FFTParams(N=base.N, alpha=base.alpha, eta=base.eta, b=b, use_simpson=base.use_simpson)
+
 ###############################################################################
 # Characteristic functions for the models
 ###############################################################################
@@ -399,24 +417,24 @@ def carr_madan_call_fft(
     # Frequency grid v_j = j*eta
     j = np.arange(N)
     v = j * eta
+
+    def _nan_pricing_grid() -> tuple[np.ndarray, np.ndarray]:
+        lambda_ = 2.0 * np.pi / (N * eta)
+        k = b + j * lambda_
+        K_grid = np.exp(k)
+        C_grid = np.full(N, np.nan, dtype=float)
+        return K_grid, C_grid
+
     # Compute Ψ(v) = φ(v - i*(α+1)) / (α^2 + α - v^2 + i(2α+1)v)
     u_shift = v - 1j * (alpha + 1.0)
     phi_vals = cf(u_shift, T, F0, *params)
     if not np.all(np.isfinite(phi_vals)):
-        lambda_ = 2.0 * np.pi / (N * eta)
-        k = b + j * lambda_
-        K_grid = np.exp(k)
-        C_grid = np.full(N, np.nan, dtype=float)
-        return K_grid, C_grid
+        return _nan_pricing_grid()
     denom = (alpha * alpha + alpha - v * v) + 1j * (2.0 * alpha + 1.0) * v
     with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
         psi = phi_vals / denom
     if not np.all(np.isfinite(psi)):
-        lambda_ = 2.0 * np.pi / (N * eta)
-        k = b + j * lambda_
-        K_grid = np.exp(k)
-        C_grid = np.full(N, np.nan, dtype=float)
-        return K_grid, C_grid
+        return _nan_pricing_grid()
     # Quadrature weights and scaling by η
     w = _quadrature_weights_cached(N, fft_params.use_simpson)
     # Sequence x_j = e^{-i v_j b} ψ(v_j) w_j η
@@ -500,6 +518,11 @@ def _cached_pricing_grid(
     make lru_cache depend on the inputs implicitly."""
     return carr_madan_call_fft(cf, T, F0, params, fft_params)
 
+
+def clear_fft_cache() -> None:
+    """Clear cached FFT pricing grids."""
+    _cached_pricing_grid.cache_clear()
+
 ###############################################################################
 # Public pricing function
 ###############################################################################
@@ -515,7 +538,7 @@ def price_inverse_option(
     fft_params: FFTParams | None = None,
     use_cache: bool = True,
     return_grid: bool = False,
-) -> tuple[np.ndarray, np.ndarray] | np.ndarray:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | np.ndarray:
     """Price European inverse call or put options under the specified model.
 
     Parameters

@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .calibration import WeightConfig, calibrate_model, filter_liquid_options, price_dataframe
-from .inverse_fft_pricer import FFTParams
+from .inverse_fft_pricer import FFTParams, center_fft_params_on_strikes
 
 
 # ---------------------------------------------------------------------------
@@ -172,15 +172,26 @@ def process_snapshot_to_payload(
         base.update(params)
         return pd.DataFrame([base])
 
-    # --- Load & filter
-    try:
-        df_raw = pd.read_csv(csv_path)
-    except Exception as e:
-        msg = f"Read CSV exception: {repr(e)}"
+    _NAN_BLACK_PARAMS = {"sigma": np.nan}
+    _NAN_HESTON_PARAMS = {"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan}
+    _NAN_SVCJ_PARAMS = {
+        "kappa": np.nan,
+        "theta": np.nan,
+        "sigma_v": np.nan,
+        "rho": np.nan,
+        "v0": np.nan,
+        "lam": np.nan,
+        "ell_y": np.nan,
+        "sigma_y": np.nan,
+        "ell_v": np.nan,
+        "rho_j": np.nan,
+    }
+
+    def _failure_payload(message: str, *, n_total: int) -> Dict[str, Any]:
         black_row = _make_param_row(
             "black",
             success=False,
-            message=msg,
+            message=message,
             nfev=0,
             rmse_fit=np.nan,
             mae_fit=np.nan,
@@ -188,15 +199,15 @@ def process_snapshot_to_payload(
             mae_train=np.nan,
             rmse_test=np.nan,
             mae_test=np.nan,
-            n_total=0,
+            n_total=int(n_total),
             n_train=0,
             n_test=0,
-            params={"sigma": np.nan},
+            params=_NAN_BLACK_PARAMS,
         )
         heston_row = _make_param_row(
             "heston",
             success=False,
-            message=msg,
+            message=message,
             nfev=0,
             rmse_fit=np.nan,
             mae_fit=np.nan,
@@ -204,15 +215,15 @@ def process_snapshot_to_payload(
             mae_train=np.nan,
             rmse_test=np.nan,
             mae_test=np.nan,
-            n_total=0,
+            n_total=int(n_total),
             n_train=0,
             n_test=0,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
+            params=_NAN_HESTON_PARAMS,
         )
         svcj_row = _make_param_row(
             "svcj",
             success=False,
-            message=msg,
+            message=message,
             nfev=0,
             rmse_fit=np.nan,
             mae_fit=np.nan,
@@ -220,21 +231,10 @@ def process_snapshot_to_payload(
             mae_train=np.nan,
             rmse_test=np.nan,
             mae_test=np.nan,
-            n_total=0,
+            n_total=int(n_total),
             n_train=0,
             n_test=0,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
+            params=_NAN_SVCJ_PARAMS,
         )
         return {
             "timestamp_iso": ts_iso,
@@ -246,76 +246,16 @@ def process_snapshot_to_payload(
             "warm_next": warm_next,
         }
 
+    # --- Load & filter
+    try:
+        df_raw = pd.read_csv(csv_path)
+    except Exception as e:
+        msg = f"Read CSV exception: {repr(e)}"
+        return _failure_payload(msg, n_total=0)
+
     if "currency" not in df_raw.columns:
         msg = "Missing required column: 'currency'"
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_raw)),
-            n_train=0,
-            n_test=0,
-            params={"sigma": np.nan},
-        )
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_raw)),
-            n_train=0,
-            n_test=0,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-        )
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_raw)),
-            n_train=0,
-            n_test=0,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
-        )
-        return {
-            "timestamp_iso": ts_iso,
-            "timestamp": ts,
-            "currency": currency,
-            "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
-            "train_df": empty_tt,
-            "test_df": empty_tt,
-            "warm_next": warm_next,
-        }
+        return _failure_payload(msg, n_total=int(len(df_raw)))
 
     # Be tolerant to casing / stray whitespace in source CSVs.
     # `filter_liquid_options(..., currency=...)` is already case-insensitive, but
@@ -326,218 +266,17 @@ def process_snapshot_to_payload(
 
     if df_ccy.empty:
         msg = f"No rows found for currency={currency} in this snapshot."
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={"sigma": np.nan},
-        )
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-        )
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
-        )
-        return {
-            "timestamp_iso": ts_iso,
-            "timestamp": ts,
-            "currency": currency,
-            "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
-            "train_df": empty_tt,
-            "test_df": empty_tt,
-            "warm_next": warm_next,
-        }
+        return _failure_payload(msg, n_total=0)
 
     try:
         df_filt = filter_liquid_options(df_ccy, currency=currency, **filter_rules)
     except Exception as e:
         msg = f"Filtering exception: {repr(e)}"
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={"sigma": np.nan},
-        )
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-        )
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=0,
-            n_train=0,
-            n_test=0,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
-        )
-        return {
-            "timestamp_iso": ts_iso,
-            "timestamp": ts,
-            "currency": currency,
-            "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
-            "train_df": empty_tt,
-            "test_df": empty_tt,
-            "warm_next": warm_next,
-        }
+        return _failure_payload(msg, n_total=0)
 
     if len(df_filt) < int(min_options_after_filter):
         msg = f"Skipped: too few options after filtering: n={len(df_filt)} < {min_options_after_filter}"
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_filt)),
-            n_train=0,
-            n_test=0,
-            params={"sigma": np.nan},
-        )
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_filt)),
-            n_train=0,
-            n_test=0,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-        )
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=msg,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(len(df_filt)),
-            n_train=0,
-            n_test=0,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
-        )
-        return {
-            "timestamp_iso": ts_iso,
-            "timestamp": ts,
-            "currency": currency,
-            "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
-            "train_df": empty_tt,
-            "test_df": empty_tt,
-            "warm_next": warm_next,
-        }
+        return _failure_payload(msg, n_total=int(len(df_filt)))
 
     # Optional runtime restriction
     df_filt = restrict_for_runtime(
@@ -549,12 +288,7 @@ def process_snapshot_to_payload(
 
     # Precompute per-expiry FFTParams using *all* filtered options in this snapshot.
     def _fft_params_for_expiry(strikes: np.ndarray) -> FFTParams:
-        N = fft_base.N
-        eta = fft_base.eta
-        lam = 2.0 * np.pi / (N * eta)
-        logK_center = float(np.log(np.median(strikes)))
-        b = logK_center - 0.5 * N * lam
-        return FFTParams(N=N, alpha=fft_base.alpha, eta=eta, b=b, use_simpson=fft_base.use_simpson)
+        return center_fft_params_on_strikes(fft_base, strikes)
 
     fft_params_by_expiry: dict = {}
     for exp, g in df_filt.groupby("expiry_datetime", sort=False):

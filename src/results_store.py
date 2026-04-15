@@ -173,12 +173,13 @@ def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
     wb = init_empty_workbook()
 
     # params sheets: enforce schema
-    if PARAM_SHEET_BLACK in sheets:
-        wb[PARAM_SHEET_BLACK] = ensure_param_columns(sheets[PARAM_SHEET_BLACK], PARAM_COLS_BLACK)
-    if PARAM_SHEET_HESTON in sheets:
-        wb[PARAM_SHEET_HESTON] = ensure_param_columns(sheets[PARAM_SHEET_HESTON], PARAM_COLS_HESTON)
-    if PARAM_SHEET_SVCJ in sheets:
-        wb[PARAM_SHEET_SVCJ] = ensure_param_columns(sheets[PARAM_SHEET_SVCJ], PARAM_COLS_SVCJ)
+    for sheet_name, expected_cols in [
+        (PARAM_SHEET_BLACK, PARAM_COLS_BLACK),
+        (PARAM_SHEET_HESTON, PARAM_COLS_HESTON),
+        (PARAM_SHEET_SVCJ, PARAM_COLS_SVCJ),
+    ]:
+        if sheet_name in sheets:
+            wb[sheet_name] = ensure_param_columns(sheets[sheet_name], expected_cols)
 
     # train/test: keep as-is; we'll align columns on append
     if TRAIN_SHEET in sheets:
@@ -263,9 +264,12 @@ def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> Non
     # Ensure stable ordering
     wb_to_write = dict(wb)
 
-    wb_to_write[PARAM_SHEET_BLACK] = ensure_param_columns(wb_to_write.get(PARAM_SHEET_BLACK, pd.DataFrame()), PARAM_COLS_BLACK)
-    wb_to_write[PARAM_SHEET_HESTON] = ensure_param_columns(wb_to_write.get(PARAM_SHEET_HESTON, pd.DataFrame()), PARAM_COLS_HESTON)
-    wb_to_write[PARAM_SHEET_SVCJ] = ensure_param_columns(wb_to_write.get(PARAM_SHEET_SVCJ, pd.DataFrame()), PARAM_COLS_SVCJ)
+    for sheet_name, expected_cols in [
+        (PARAM_SHEET_BLACK, PARAM_COLS_BLACK),
+        (PARAM_SHEET_HESTON, PARAM_COLS_HESTON),
+        (PARAM_SHEET_SVCJ, PARAM_COLS_SVCJ),
+    ]:
+        wb_to_write[sheet_name] = ensure_param_columns(wb_to_write.get(sheet_name, pd.DataFrame()), expected_cols)
 
     # sort param sheets
     for sh in [PARAM_SHEET_BLACK, PARAM_SHEET_HESTON, PARAM_SHEET_SVCJ]:
