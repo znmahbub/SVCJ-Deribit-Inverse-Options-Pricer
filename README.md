@@ -27,12 +27,10 @@ At a high level, the workflow is:
 ├── src/                         # Runtime pricing, calibration, data, and hedging code
 ├── notebooks/                   # Maintained thesis/reporting notebooks
 │   ├── _lib/                    # Shared notebook helper modules
-│   ├── chapter3_outputs/        # Generated chapter-3 tables and Plotly HTML
 │   └── *.ipynb
 ├── docs/                        # Code documentation and thesis materials
 ├── data/                        # Snapshot CSVs and futures histories
 ├── excel files/                 # Calibration and hedging Excel workbooks
-├── hedging_output/              # Generated chapter-4 hedging exports
 ├── tests/                       # Regression, invariants, notebook, and I/O checks
 ├── pricing_examples.ipynb       # Primary pricing walkthrough
 ├── calibration_example.ipynb    # Primary single-snapshot calibration walkthrough
@@ -79,6 +77,9 @@ At a high level, the workflow is:
 - `notebooks/calibration_analysis_complete_reg_10.ipynb`
 - `notebooks/calibration_analysis_complete_reg_50.ipynb`
 - `notebooks/calibration_analysis_complete_reg_100.ipynb` — chapter-3 calibration analysis notebooks for different regularization strengths.
+- `notebooks/calibration_analysis_complete_reg_250.ipynb`
+- `notebooks/calibration_analysis_complete_reg_500.ipynb`
+- `notebooks/calibration_analysis_complete_reg_1000.ipynb`
 - `notebooks/calibration_results_final.ipynb` — compact final chapter-3 reporting notebook that compares regularization choices and exports the main calibration figures/tables.
 - `notebooks/futures_plotly_viewer.ipynb` — interactive viewer for perpetual and term futures histories.
 - `notebooks/hedging_analytics.ipynb` — chapter-4 reporting notebook for pooled hedging metrics, time-series diagnostics, bucket analyses, and exports.
