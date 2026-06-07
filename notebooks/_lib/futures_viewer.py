@@ -79,11 +79,11 @@ def suggest_term_instruments(term: pd.DataFrame) -> list[str]:
 def build_perp_figure(data: FuturesData) -> go.Figure:
     fig = go.Figure()
     for coin, group in data.perp.dropna(subset=["obs_datetime"]).groupby("coin"):
-        gg = group.sort_values("obs_datetime")
+        grp = group.sort_values("obs_datetime")
         fig.add_trace(
             go.Scatter(
-                x=gg["obs_datetime"],
-                y=gg[data.perp_price_col],
+                x=grp["obs_datetime"],
+                y=grp[data.perp_price_col],
                 mode="lines",
                 name=str(coin),
                 hovertemplate="Coin=%{fullData.name}<br>Time=%{x}<br>Price=%{y:.4f}<extra></extra>",
@@ -107,11 +107,11 @@ def build_term_figure(data: FuturesData, term_instruments: list[str]) -> go.Figu
 
     fig = go.Figure()
     for inst, group in term_plot.dropna(subset=["timestamp"]).groupby("futures_instrument_name"):
-        gg = group.sort_values("timestamp")
+        grp = group.sort_values("timestamp")
         fig.add_trace(
             go.Scatter(
-                x=gg["timestamp"],
-                y=gg[data.term_price_col],
+                x=grp["timestamp"],
+                y=grp[data.term_price_col],
                 mode="lines",
                 name=str(inst),
                 hovertemplate="Instrument=%{fullData.name}<br>Time=%{x}<br>Price=%{y:.4f}<extra></extra>",

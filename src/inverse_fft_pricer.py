@@ -49,6 +49,7 @@ characteristic function is performed using Gauss–Legendre quadrature.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 import numpy as np
@@ -207,10 +208,21 @@ def cf_heston(
     z = A + B * v0 + iu * np.log(F0)
     # If the real part is too large, exp() will overflow; treat as invalid.
     if np.any(~np.isfinite(z)) or np.any(np.real(z) > 700.0):
+        warnings.warn(
+            "cf_heston: characteristic function z contains non-finite or overflowing values; "
+            "returning NaN. Check that Heston parameters are well-conditioned.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return np.full_like(u, np.nan, dtype=np.complex128)
     with np.errstate(over='ignore', invalid='ignore'):
         phi = np.exp(z)
     if np.any(~np.isfinite(phi)):
+        warnings.warn(
+            "cf_heston: exp(z) produced non-finite values; returning NaN.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         phi = np.full_like(u, np.nan, dtype=np.complex128)
     return phi
 
@@ -318,6 +330,13 @@ def cf_svcj(
     denom = 1.0 - ell_v * (B_s + iu[np.newaxis, :] * rho_j)
     # If the jump MGF denominator gets too close to zero, pricing becomes unstable.
     if (not np.all(np.isfinite(denom))) or np.min(np.abs(denom)) < 1e-12:
+        warnings.warn(
+            "cf_svcj: jump MGF denominator is near-zero or non-finite "
+            "(1 − ell_v*(B(s;u) + i*u*rho_j) ≈ 0). "
+            "Check ell_v and rho_j values. Returning NaN.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         phi = np.full_like(u, np.nan, dtype=np.complex128)
         return phi[0] if scalar_input else phi
     num = np.exp(iu * ell_y - 0.5 * (sigma_y * sigma_y) * (u ** 2))
@@ -330,11 +349,22 @@ def cf_svcj(
     A = A_diff + A_jump
     z = A + B_tau * v0 + iu * np.log(F0)
     if np.any(~np.isfinite(z)) or np.any(np.real(z) > 700.0):
+        warnings.warn(
+            "cf_svcj: combined exponent z contains non-finite or overflowing values; "
+            "returning NaN. Check SVCJ parameters are well-conditioned.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         phi = np.full_like(u, np.nan, dtype=np.complex128)
         return phi[0] if scalar_input else phi
     with np.errstate(over='ignore', invalid='ignore'):
         phi = np.exp(z)
     if np.any(~np.isfinite(phi)):
+        warnings.warn(
+            "cf_svcj: exp(z) produced non-finite values; returning NaN.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         phi = np.full_like(u, np.nan, dtype=np.complex128)
     return phi[0] if scalar_input else phi
 
@@ -351,16 +381,13 @@ def _quadrature_weights(N: int, use_simpson: bool) -> np.ndarray:
     appropriate integral weight.
     """
     if use_simpson:
-        # Simpson's rule requires N even and yields weights scaled by 1/3
+        # Simpson's rule requires N even and yields weights scaled by 1/3.
+        # Vectorised: odd indices → 4/3, even interior indices → 2/3, endpoints → 1/3.
         w = np.empty(N, dtype=float)
-        w[0] = 1.0 / 3.0
-        w[-1] = 1.0 / 3.0
-        # For indices 1..N-2
-        for j in range(1, N - 1):
-            if j % 2 == 1:
-                w[j] = 4.0 / 3.0
-            else:
-                w[j] = 2.0 / 3.0
+        w[0]    = 1.0 / 3.0
+        w[-1]   = 1.0 / 3.0
+        w[1:-1:2] = 4.0 / 3.0   # odd indices: 1, 3, …, N-3
+        w[2:-1:2] = 2.0 / 3.0   # even interior indices: 2, 4, …, N-2
         return w
     else:
         # Trapezoidal rule
@@ -418,7 +445,12 @@ def carr_madan_call_fft(
     j = np.arange(N)
     v = j * eta
 
-    def _nan_pricing_grid() -> tuple[np.ndarray, np.ndarray]:
+    def _nan_pricing_grid(reason: str = "") -> tuple[np.ndarray, np.ndarray]:
+        warnings.warn(
+            f"carr_madan_call_fft: returning NaN pricing grid. {reason}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
         lambda_ = 2.0 * np.pi / (N * eta)
         k = b + j * lambda_
         K_grid = np.exp(k)
@@ -429,12 +461,12 @@ def carr_madan_call_fft(
     u_shift = v - 1j * (alpha + 1.0)
     phi_vals = cf(u_shift, T, F0, *params)
     if not np.all(np.isfinite(phi_vals)):
-        return _nan_pricing_grid()
+        return _nan_pricing_grid("Characteristic function returned non-finite values.")
     denom = (alpha * alpha + alpha - v * v) + 1j * (2.0 * alpha + 1.0) * v
     with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
         psi = phi_vals / denom
     if not np.all(np.isfinite(psi)):
-        return _nan_pricing_grid()
+        return _nan_pricing_grid("Damped call integrand ψ is non-finite.")
     # Quadrature weights and scaling by η
     w = _quadrature_weights_cached(N, fft_params.use_simpson)
     # Sequence x_j = e^{-i v_j b} ψ(v_j) w_j η

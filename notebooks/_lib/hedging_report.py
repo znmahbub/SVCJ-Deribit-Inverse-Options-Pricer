@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from pathlib import Path
 
 
@@ -13,7 +14,7 @@ def export_hedging_notebook_outputs(
     export_tables: bool,
     export_figures_html: bool,
     export_dir: Path,
-    analytics_module,
+    analytics_module: types.ModuleType,
 ) -> None:
     if export_tables or export_figures_html:
         export_dir.mkdir(parents=True, exist_ok=True)

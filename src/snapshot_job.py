@@ -18,7 +18,6 @@ for persistence.
 
 from __future__ import annotations
 
-import math
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -57,15 +56,19 @@ def timestamp_to_iso_z(ts: pd.Timestamp) -> str:
 
 
 def compute_errors(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    """Simple unweighted error metrics."""
+    """Simple unweighted error metrics.
 
+    Returns
+    -------
+    dict with keys ``rmse`` and ``mae`` (both in coin units).
+    """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     keep = np.isfinite(y_true) & np.isfinite(y_pred)
     if not np.any(keep):
-        return {"mse": float("nan"), "mae": float("nan")}
+        return {"rmse": float("nan"), "mae": float("nan")}
     err = y_pred[keep] - y_true[keep]
-    return {"mse": float(np.mean(err * err)), "mae": float(np.mean(np.abs(err)))}
+    return {"rmse": float(np.sqrt(np.mean(err * err))), "mae": float(np.mean(np.abs(err)))}
 
 
 def restrict_for_runtime(
@@ -172,75 +175,34 @@ def process_snapshot_to_payload(
         base.update(params)
         return pd.DataFrame([base])
 
-    _NAN_BLACK_PARAMS = {"sigma": np.nan}
-    _NAN_HESTON_PARAMS = {"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan}
-    _NAN_SVCJ_PARAMS = {
-        "kappa": np.nan,
-        "theta": np.nan,
-        "sigma_v": np.nan,
-        "rho": np.nan,
-        "v0": np.nan,
-        "lam": np.nan,
-        "ell_y": np.nan,
-        "sigma_y": np.nan,
-        "ell_v": np.nan,
-        "rho_j": np.nan,
+    # NaN-filled parameter dicts used when a model fails or is skipped.
+    _NAN_PARAMS: dict[str, dict[str, float]] = {
+        "black": {"sigma": np.nan},
+        "heston": {"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
+        "svcj": {
+            "kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan,
+            "lam": np.nan, "ell_y": np.nan, "sigma_y": np.nan, "ell_v": np.nan, "rho_j": np.nan,
+        },
     }
 
     def _failure_payload(message: str, *, n_total: int) -> Dict[str, Any]:
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=message,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(n_total),
-            n_train=0,
-            n_test=0,
-            params=_NAN_BLACK_PARAMS,
-        )
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=message,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(n_total),
-            n_train=0,
-            n_test=0,
-            params=_NAN_HESTON_PARAMS,
-        )
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=message,
-            nfev=0,
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=np.nan,
-            mae_train=np.nan,
-            rmse_test=np.nan,
-            mae_test=np.nan,
-            n_total=int(n_total),
-            n_train=0,
-            n_test=0,
-            params=_NAN_SVCJ_PARAMS,
-        )
+        rows = {
+            m: _make_param_row(
+                m,
+                success=False, message=message, nfev=0,
+                rmse_fit=np.nan, mae_fit=np.nan,
+                rmse_train=np.nan, mae_train=np.nan,
+                rmse_test=np.nan,  mae_test=np.nan,
+                n_total=int(n_total), n_train=0, n_test=0,
+                params=_NAN_PARAMS[m],
+            )
+            for m in ("black", "heston", "svcj")
+        }
         return {
             "timestamp_iso": ts_iso,
             "timestamp": ts,
             "currency": currency,
-            "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
+            "param_rows": rows,
             "train_df": empty_tt,
             "test_df": empty_tt,
             "warm_next": warm_next,
@@ -430,205 +392,56 @@ def process_snapshot_to_payload(
         col = price_cols[model]
         p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
         p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
-        e_tr = compute_errors(y_train, p_train) if len(train_out) else {"mse": np.nan, "mae": np.nan}
-        e_te = compute_errors(y_test, p_test) if len(test_out) else {"mse": np.nan, "mae": np.nan}
+        e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
+        e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
         errs[model] = dict(
-            rmse_train=float(math.sqrt(e_tr["mse"])) if np.isfinite(e_tr["mse"]) else float("nan"),
+            rmse_train=float(e_tr["rmse"]),
             mae_train=float(e_tr["mae"]),
-            rmse_test=float(math.sqrt(e_te["mse"])) if np.isfinite(e_te["mse"]) else float("nan"),
+            rmse_test=float(e_te["rmse"]),
             mae_test=float(e_te["mae"]),
         )
 
     n_total = int(len(df_out))
     n_test = int(len(test_out))
 
-    # Parameter rows
-    if isinstance(results.get("black"), dict):
-        msg = results["black"].get("message", "failed")
-        black_row = _make_param_row(
-            "black",
-            success=False,
-            message=msg,
-            nfev=results["black"].get("nfev", 0),
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=errs["black"]["rmse_train"],
-            mae_train=errs["black"]["mae_train"],
-            rmse_test=errs["black"]["rmse_test"],
-            mae_test=errs["black"]["mae_test"],
-            n_total=n_total,
-            n_train=n_train,
-            n_test=n_test,
-            params={"sigma": np.nan},
+    # Build one parameter row per model, dispatching on result type.
+    def _build_result_param_row(model: str) -> pd.DataFrame:
+        """Turn a calibration result (CalibrationResult | exception-dict | None) into a row."""
+        result = results.get(model)
+        model_errs = errs[model]
+        common = dict(
+            rmse_train=model_errs["rmse_train"],
+            mae_train=model_errs["mae_train"],
+            rmse_test=model_errs["rmse_test"],
+            mae_test=model_errs["mae_test"],
+            n_total=n_total, n_train=n_train, n_test=n_test,
         )
-    else:
-        resb = results.get("black", None)
-        if resb is None:
-            black_row = _make_param_row(
-                "black",
-                success=False,
-                message="failed",
-                nfev=0,
-                rmse_fit=np.nan,
-                mae_fit=np.nan,
-                rmse_train=errs["black"]["rmse_train"],
-                mae_train=errs["black"]["mae_train"],
-                rmse_test=errs["black"]["rmse_test"],
-                mae_test=errs["black"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params={"sigma": np.nan},
+        if isinstance(result, dict):
+            # Exception raised inside the calibration try/except block.
+            return _make_param_row(
+                model, success=False,
+                message=result.get("message", "failed"),
+                nfev=result.get("nfev", 0),
+                rmse_fit=np.nan, mae_fit=np.nan,
+                params=_NAN_PARAMS[model], **common,
             )
-        else:
-            black_row = _make_param_row(
-                "black",
-                success=bool(resb.success),
-                message=resb.message,
-                nfev=resb.nfev,
-                rmse_fit=resb.rmse,
-                mae_fit=resb.mae,
-                rmse_train=errs["black"]["rmse_train"],
-                mae_train=errs["black"]["mae_train"],
-                rmse_test=errs["black"]["rmse_test"],
-                mae_test=errs["black"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params=dict(resb.params),
+        if result is None:
+            # Model entry was never created (should not normally happen).
+            return _make_param_row(
+                model, success=False, message="failed", nfev=0,
+                rmse_fit=np.nan, mae_fit=np.nan,
+                params=_NAN_PARAMS[model], **common,
             )
+        # CalibrationResult dataclass — normal success or optimizer failure.
+        return _make_param_row(
+            model, success=bool(result.success), message=result.message, nfev=result.nfev,
+            rmse_fit=result.rmse, mae_fit=result.mae,
+            params=dict(result.params), **common,
+        )
 
-    if isinstance(results.get("heston"), dict):
-        msg = results["heston"].get("message", "failed")
-        heston_row = _make_param_row(
-            "heston",
-            success=False,
-            message=msg,
-            nfev=results["heston"].get("nfev", 0),
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=errs["heston"]["rmse_train"],
-            mae_train=errs["heston"]["mae_train"],
-            rmse_test=errs["heston"]["rmse_test"],
-            mae_test=errs["heston"]["mae_test"],
-            n_total=n_total,
-            n_train=n_train,
-            n_test=n_test,
-            params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-        )
-    else:
-        resh = results.get("heston", None)
-        if resh is None:
-            heston_row = _make_param_row(
-                "heston",
-                success=False,
-                message="failed",
-                nfev=0,
-                rmse_fit=np.nan,
-                mae_fit=np.nan,
-                rmse_train=errs["heston"]["rmse_train"],
-                mae_train=errs["heston"]["mae_train"],
-                rmse_test=errs["heston"]["rmse_test"],
-                mae_test=errs["heston"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params={"kappa": np.nan, "theta": np.nan, "sigma_v": np.nan, "rho": np.nan, "v0": np.nan},
-            )
-        else:
-            heston_row = _make_param_row(
-                "heston",
-                success=bool(resh.success),
-                message=resh.message,
-                nfev=resh.nfev,
-                rmse_fit=resh.rmse,
-                mae_fit=resh.mae,
-                rmse_train=errs["heston"]["rmse_train"],
-                mae_train=errs["heston"]["mae_train"],
-                rmse_test=errs["heston"]["rmse_test"],
-                mae_test=errs["heston"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params=dict(resh.params),
-            )
-
-    if isinstance(results.get("svcj"), dict):
-        msg = results["svcj"].get("message", "failed")
-        svcj_row = _make_param_row(
-            "svcj",
-            success=False,
-            message=msg,
-            nfev=results["svcj"].get("nfev", 0),
-            rmse_fit=np.nan,
-            mae_fit=np.nan,
-            rmse_train=errs["svcj"]["rmse_train"],
-            mae_train=errs["svcj"]["mae_train"],
-            rmse_test=errs["svcj"]["rmse_test"],
-            mae_test=errs["svcj"]["mae_test"],
-            n_total=n_total,
-            n_train=n_train,
-            n_test=n_test,
-            params={
-                "kappa": np.nan,
-                "theta": np.nan,
-                "sigma_v": np.nan,
-                "rho": np.nan,
-                "v0": np.nan,
-                "lam": np.nan,
-                "ell_y": np.nan,
-                "sigma_y": np.nan,
-                "ell_v": np.nan,
-                "rho_j": np.nan,
-            },
-        )
-    else:
-        ress = results.get("svcj", None)
-        if ress is None:
-            svcj_row = _make_param_row(
-                "svcj",
-                success=False,
-                message="failed",
-                nfev=0,
-                rmse_fit=np.nan,
-                mae_fit=np.nan,
-                rmse_train=errs["svcj"]["rmse_train"],
-                mae_train=errs["svcj"]["mae_train"],
-                rmse_test=errs["svcj"]["rmse_test"],
-                mae_test=errs["svcj"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params={
-                    "kappa": np.nan,
-                    "theta": np.nan,
-                    "sigma_v": np.nan,
-                    "rho": np.nan,
-                    "v0": np.nan,
-                    "lam": np.nan,
-                    "ell_y": np.nan,
-                    "sigma_y": np.nan,
-                    "ell_v": np.nan,
-                    "rho_j": np.nan,
-                },
-            )
-        else:
-            svcj_row = _make_param_row(
-                "svcj",
-                success=bool(ress.success),
-                message=ress.message,
-                nfev=ress.nfev,
-                rmse_fit=ress.rmse,
-                mae_fit=ress.mae,
-                rmse_train=errs["svcj"]["rmse_train"],
-                mae_train=errs["svcj"]["mae_train"],
-                rmse_test=errs["svcj"]["rmse_test"],
-                mae_test=errs["svcj"]["mae_test"],
-                n_total=n_total,
-                n_train=n_train,
-                n_test=n_test,
-                params=dict(ress.params),
-            )
+    black_row  = _build_result_param_row("black")
+    heston_row = _build_result_param_row("heston")
+    svcj_row   = _build_result_param_row("svcj")
 
     return {
         "timestamp_iso": ts_iso,

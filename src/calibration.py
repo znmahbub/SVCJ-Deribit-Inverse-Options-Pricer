@@ -27,7 +27,12 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from .inverse_fft_pricer import FFTParams, center_fft_params_on_strikes, price_inverse_option, _cached_pricing_grid
+from .inverse_fft_pricer import (
+    FFTParams,
+    center_fft_params_on_strikes,
+    clear_fft_cache as _pricer_clear_fft_cache,
+    price_inverse_option,
+)
 
 
 # -----------------------------
@@ -305,7 +310,7 @@ def price_dataframe(
 
 def clear_fft_cache() -> None:
     """Clear the FFT grid cache in the pricer (useful between calibration runs)."""
-    _cached_pricing_grid.cache_clear()
+    _pricer_clear_fft_cache()
 
 
 # -----------------------------

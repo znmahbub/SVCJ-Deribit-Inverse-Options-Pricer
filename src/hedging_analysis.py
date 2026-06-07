@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any
 import math
@@ -15,7 +15,13 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 from src.calibration import _build_pricing_plan, _price_with_plan
-from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj
+from src.inverse_fft_pricer import (
+    FFTParams,
+    _leggauss_cached,          # shared cached GL nodes — no need to redefine
+    _norm_cdf,                  # shared rational-approximation CDF
+    cf_heston,
+    cf_svcj,
+)
 from src.results_store import (
     PARAM_SHEET_BLACK,
     PARAM_SHEET_HESTON,
@@ -138,17 +144,6 @@ def _make_progress(total: int, desc: str):
             return None
 
     return _FallbackProgress(total, desc)
-
-
-@lru_cache(maxsize=None)
-def _leggauss_cached(n: int) -> tuple[np.ndarray, np.ndarray]:
-    return np.polynomial.legendre.leggauss(int(n))
-
-
-def _norm_cdf(x: np.ndarray | float) -> np.ndarray | float:
-    x_arr = np.asarray(x, dtype=float)
-    cdf = 0.5 * (1.0 + np.vectorize(math.erf)(x_arr / math.sqrt(2.0)))
-    return float(cdf) if np.isscalar(x) else cdf
 
 
 def load_calibration_workbook(path: Path) -> dict[str, pd.DataFrame]:
@@ -438,12 +433,31 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
     for idx, K_g, put_mask, T_g, F0_g, _ in pricing_plan:
         K_g = np.asarray(K_g, dtype=float)
         if model == "black":
-            p1 = _black_call_delta(np.full_like(K_g, float(F0_g)), K_g, np.full_like(K_g, float(T_g)), np.full_like(K_g, float(params["sigma"])))
+            p1 = _black_call_delta(
+                np.full_like(K_g, float(F0_g)), K_g,
+                np.full_like(K_g, float(T_g)),
+                np.full_like(K_g, float(params["sigma"])),
+            )
         elif model == "heston":
-            cf = lambda u: cf_heston(u, T=float(T_g), F0=float(F0_g), kappa=float(params["kappa"]), theta=float(params["theta"]), sigma_v=float(params["sigma_v"]), rho=float(params["rho"]), v0=float(params["v0"]))
+            # Use partial to bind loop variables by value — avoids late-binding closure bugs.
+            cf = partial(
+                cf_heston,
+                T=float(T_g), F0=float(F0_g),
+                kappa=float(params["kappa"]), theta=float(params["theta"]),
+                sigma_v=float(params["sigma_v"]), rho=float(params["rho"]),
+                v0=float(params["v0"]),
+            )
             p1 = _semi_analytic_call_p1_from_logprice_cf(K_g, cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
         elif model == "svcj":
-            cf = lambda u: cf_svcj(u, T=float(T_g), F0=float(F0_g), kappa=float(params["kappa"]), theta=float(params["theta"]), sigma_v=float(params["sigma_v"]), rho=float(params["rho"]), v0=float(params["v0"]), lam=float(params["lam"]), ell_y=float(params["ell_y"]), sigma_y=float(params["sigma_y"]), ell_v=float(params["ell_v"]), rho_j=float(params["rho_j"]))
+            cf = partial(
+                cf_svcj,
+                T=float(T_g), F0=float(F0_g),
+                kappa=float(params["kappa"]), theta=float(params["theta"]),
+                sigma_v=float(params["sigma_v"]), rho=float(params["rho"]),
+                v0=float(params["v0"]), lam=float(params["lam"]),
+                ell_y=float(params["ell_y"]), sigma_y=float(params["sigma_y"]),
+                ell_v=float(params["ell_v"]), rho_j=float(params["rho_j"]),
+            )
             p1 = _semi_analytic_call_p1_from_logprice_cf(K_g, cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
         else:
             raise ValueError(f"Unsupported model: {model}")

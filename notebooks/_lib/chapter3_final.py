@@ -12,6 +12,10 @@ from plotly.subplots import make_subplots
 from .common import save_plotly_figure, style_figure
 
 
+# Floor used when normalising roughness by IQR — prevents division by zero for
+# parameters that barely move across snapshots.
+_EPS_SCALE = 1e-12
+
 MODEL_LABELS = {"black": "Black", "heston": "Heston", "svcj": "SVCJ"}
 MODEL_COLORS = {"black": "#6b7280", "heston": "#2563eb", "svcj": "#dc2626"}
 
@@ -63,8 +67,8 @@ def compute_regularisation_summary(files: list[Path], output_dir: Path) -> pd.Da
             for param in selected:
                 series = group[param].astype(float)
                 iqr = series.quantile(0.75) - series.quantile(0.25)
-                scale = iqr if pd.notna(iqr) and iqr > 1e-12 else series.std()
-                if pd.isna(scale) or scale <= 1e-12:
+                scale = iqr if pd.notna(iqr) and iqr > _EPS_SCALE else series.std()
+                if pd.isna(scale) or scale <= _EPS_SCALE:
                     continue
                 roughness_terms.append(float(series.diff().abs().median() / scale))
 

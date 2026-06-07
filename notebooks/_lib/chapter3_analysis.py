@@ -1,3 +1,16 @@
+"""Calibration analysis helpers for the Chapter 3 regularisation-sweep notebooks.
+
+Public API used by the auto-generated notebooks (see
+``sync_regularization_notebooks.py``) and the final synthesis notebook:
+
+* ``build_analysis_state`` – load a results workbook and compute all derived
+  tables in one shot, returning an :class:`AnalysisState` dataclass.
+* ``run_currency_report`` – convenience wrapper that renders the full BTC or
+  ETH report inside a notebook.
+* Individual plotting / table functions (``plot_error_timeseries``,
+  ``error_summary_table``, ``near_bound_rates``, …) for bespoke analysis.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,14 +37,25 @@ COLORS = {
 }
 
 FIGDIMS = dict(width=1200, height=1100)
+
+# Small positive floor used to avoid division-by-zero in relative metrics
+# (within-spread rate, sMAPE, Feller ratio).
 EPS = 1e-12
+
 MONEY_BINS = [0.0, 0.05, 0.15, 0.30, np.inf]
 MONEY_LABELS = ["|log(K/F)|≤0.05", "0.05–0.15", "0.15–0.30", ">0.30"]
 T_BINS = [0.0, 7 / 365, 30 / 365, 90 / 365, np.inf]
 T_LABELS = ["≤1w", "1w–1m", "1m–3m", ">3m"]
+
+# Rho bounds in natural (correlation) space, derived from the arctanh transform
+# used during calibration: ρ = tanh(u) with u ∈ [-5, 5].
 RHO_LB = np.tanh(-5.0)
 RHO_UB = np.tanh(5.0)
 
+# Parameter bounds in *natural* (untransformed) space, used exclusively by
+# ``near_bound_rates`` to check whether calibrated parameters cluster near
+# their box constraints.  These are NOT the optimiser bounds — the optimiser
+# works in unconstrained log/arctanh space (see ``src/calibration.py``).
 BOUNDS = {
     "Black": {"sigma": (1e-4, 5.0)},
     "Heston": {
@@ -99,6 +123,7 @@ def load_workbook(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame,
 
 
 def _to_long(df: pd.DataFrame, model_name: str, param_cols: list[str]) -> pd.DataFrame:
+    """Subset *df* to base metadata columns plus *param_cols*, tag with *model_name*."""
     base_cols = [
         "timestamp",
         "currency",
@@ -153,26 +178,26 @@ def compute_snapshot_metrics_from_quotes(df_quotes: pd.DataFrame, split_name: st
         if price_col not in df_quotes.columns:
             continue
 
-        tmp = df_quotes[
+        df_model = df_quotes[
             ["currency", "snapshot_ts", "mid_price_clean", spread_col, "log_moneyness", "time_to_maturity", price_col]
         ].copy()
-        tmp = tmp.rename(columns={price_col: "price_model", spread_col: "spread_abs"})
-        tmp["mid_price_clean"] = pd.to_numeric(tmp["mid_price_clean"], errors="coerce")
-        tmp["price_model"] = pd.to_numeric(tmp["price_model"], errors="coerce")
-        tmp["spread_abs"] = pd.to_numeric(tmp["spread_abs"], errors="coerce")
-        tmp = tmp[np.isfinite(tmp["mid_price_clean"]) & np.isfinite(tmp["price_model"]) & np.isfinite(tmp["spread_abs"])].copy()
-        tmp = tmp.loc[tmp["spread_abs"] > 0].copy()
+        df_model = df_model.rename(columns={price_col: "price_model", spread_col: "spread_abs"})
+        df_model["mid_price_clean"] = pd.to_numeric(df_model["mid_price_clean"], errors="coerce")
+        df_model["price_model"] = pd.to_numeric(df_model["price_model"], errors="coerce")
+        df_model["spread_abs"] = pd.to_numeric(df_model["spread_abs"], errors="coerce")
+        df_model = df_model[np.isfinite(df_model["mid_price_clean"]) & np.isfinite(df_model["price_model"]) & np.isfinite(df_model["spread_abs"])].copy()
+        df_model = df_model.loc[df_model["spread_abs"] > 0].copy()
 
-        err = tmp["price_model"] - tmp["mid_price_clean"]
+        err = df_model["price_model"] - df_model["mid_price_clean"]
         abs_err = err.abs()
-        tmp["err2"] = err * err
-        tmp["abs_err"] = abs_err
-        tmp["within_spread"] = (abs_err <= tmp["spread_abs"]).astype(float)
-        tmp["within_half_spread"] = (abs_err <= 0.5 * tmp["spread_abs"]).astype(float)
-        tmp["abs_err_over_spread"] = abs_err / (tmp["spread_abs"] + EPS)
-        tmp["smape"] = 2.0 * abs_err / (tmp["price_model"].abs() + tmp["mid_price_clean"].abs() + EPS)
+        df_model["err2"] = err * err
+        df_model["abs_err"] = abs_err
+        df_model["within_spread"] = (abs_err <= df_model["spread_abs"]).astype(float)
+        df_model["within_half_spread"] = (abs_err <= 0.5 * df_model["spread_abs"]).astype(float)
+        df_model["abs_err_over_spread"] = abs_err / (df_model["spread_abs"] + EPS)
+        df_model["smape"] = 2.0 * abs_err / (df_model["price_model"].abs() + df_model["mid_price_clean"].abs() + EPS)
 
-        grouped = tmp.groupby(["currency", "snapshot_ts"], as_index=False)
+        grouped = df_model.groupby(["currency", "snapshot_ts"], as_index=False)
         agg = grouped.agg(
             n=("abs_err", "count"),
             mse=("err2", "mean"),
@@ -552,6 +577,7 @@ def spread_metric_summary_table(
 
 
 def _add_buckets(df: pd.DataFrame) -> pd.DataFrame:
+    """Append ``m_bucket`` (moneyness) and ``t_bucket`` (maturity) columns to *df*."""
     out = df.copy()
     out["abs_log_moneyness"] = out["log_moneyness"].abs()
     out["m_bucket"] = pd.cut(out["abs_log_moneyness"], bins=MONEY_BINS, labels=MONEY_LABELS, right=True, include_lowest=True)
@@ -567,19 +593,19 @@ def bucket_mae_by_snapshot(df_quotes: pd.DataFrame, currency: str, *, split: str
         price_col = spec["price_col"]
         if price_col not in df.columns:
             continue
-        tmp = df[["snapshot_ts", "m_bucket", "t_bucket", "mid_price_clean", price_col]].copy().rename(columns={price_col: "price_model"})
-        tmp["mid_price_clean"] = pd.to_numeric(tmp["mid_price_clean"], errors="coerce")
-        tmp["price_model"] = pd.to_numeric(tmp["price_model"], errors="coerce")
-        tmp = tmp[np.isfinite(tmp["mid_price_clean"]) & np.isfinite(tmp["price_model"])].copy()
-        tmp["abs_err"] = (tmp["price_model"] - tmp["mid_price_clean"]).abs()
+        df_model = df[["snapshot_ts", "m_bucket", "t_bucket", "mid_price_clean", price_col]].copy().rename(columns={price_col: "price_model"})
+        df_model["mid_price_clean"] = pd.to_numeric(df_model["mid_price_clean"], errors="coerce")
+        df_model["price_model"] = pd.to_numeric(df_model["price_model"], errors="coerce")
+        df_model = df_model[np.isfinite(df_model["mid_price_clean"]) & np.isfinite(df_model["price_model"])].copy()
+        df_model["abs_err"] = (df_model["price_model"] - df_model["mid_price_clean"]).abs()
 
-        bucket_m = tmp.groupby(["snapshot_ts", "m_bucket"], as_index=False)["abs_err"].mean()
+        bucket_m = df_model.groupby(["snapshot_ts", "m_bucket"], as_index=False)["abs_err"].mean()
         bucket_m["model"] = model_key
         bucket_m["split"] = split
         bucket_m["bucket_type"] = "moneyness"
         results.append(bucket_m.rename(columns={"m_bucket": "bucket", "abs_err": "mae"}))
 
-        bucket_t = tmp.groupby(["snapshot_ts", "t_bucket"], as_index=False)["abs_err"].mean()
+        bucket_t = df_model.groupby(["snapshot_ts", "t_bucket"], as_index=False)["abs_err"].mean()
         bucket_t["model"] = model_key
         bucket_t["split"] = split
         bucket_t["bucket_type"] = "maturity"

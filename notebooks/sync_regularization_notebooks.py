@@ -7,10 +7,19 @@ import nbformat
 
 ROOT = Path(__file__).resolve().parent.parent
 NOTEBOOK_DIR = ROOT / "notebooks"
-NOTEBOOKS = [0, 1, 3, 5, 10, 50, 100]
+
+# All ten λ_TS values in the regularisation sweep (must stay in sync with the
+# actual calibration_analysis_complete_reg_*.ipynb files on disk).
+NOTEBOOKS = [0, 1, 3, 5, 10, 50, 100, 250, 500, 1000]
 
 
 def bootstrap_cell(reg_val: int) -> str:
+    """Return the source for the notebook's first (bootstrap) code cell.
+
+    The cell sets up ``sys.path``, imports the ``_lib`` helpers, resolves the
+    data file, and binds the shared analysis constants into the notebook
+    namespace.
+    """
     return f"""from pathlib import Path
 import sys
 
