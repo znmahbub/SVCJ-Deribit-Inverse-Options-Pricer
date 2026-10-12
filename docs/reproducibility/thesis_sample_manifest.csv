@@ -1,0 +1,2 @@
+manifest_version,source_file,source_git_blob_sha,analysis_start_utc,analysis_end_utc,first_snapshot_file,last_snapshot_file,expected_unique_snapshots,expected_currency_rows,definition
+1,data/snapshot_currency_combos.csv,8285645206dbd0cccc19cc17a31f6b817b3c1d68,2025-12-30T17:31:15Z,2026-04-08T10:01:19Z,deribit_options_snapshot_20251230T173115Z.csv,deribit_options_snapshot_20260408T100119Z.csv,388,776,"Exact membership is the unique snapshot_file set in the pinned source blob within the inclusive analysis bounds."
