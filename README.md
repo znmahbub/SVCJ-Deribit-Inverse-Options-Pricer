@@ -28,9 +28,9 @@ At a high level, the workflow is:
 ├── notebooks/                   # Maintained thesis/reporting notebooks
 │   ├── _lib/                    # Shared notebook helper modules
 │   └── *.ipynb
-├── docs/                        # Code documentation and thesis materials
+├── docs/                        # Code documentation, reproducibility notes, thesis materials
 ├── data/                        # Snapshot CSVs and futures histories
-├── excel files/                 # Calibration and hedging Excel workbooks
+├── excel files/                 # Link to calibration and hedging Excel workbooks
 ├── tests/                       # Regression, invariants, notebook, and I/O checks
 ├── pricing_examples.ipynb       # Primary pricing walkthrough
 ├── calibration_example.ipynb    # Primary single-snapshot calibration walkthrough
@@ -41,20 +41,22 @@ At a high level, the workflow is:
 ## How the project is organized
 
 - **Core pricing and calibration engine** — `src/inverse_fft_pricer.py`, `src/calibration.py`, `src/snapshot_job.py`, `src/results_store.py`, and `src/batch_runner.py` implement the numerical core and workbook pipeline.
+- **Analysis-window control** — `src/analysis_window.py` normalizes explicit UTC sample boundaries so a research run does not silently expand when new live snapshots are added.
 - **Data collection and market backfill** — `src/collect_deribit_snapshot.py` collects live Deribit snapshots; `src/backfill_futures_marks.py` reconstructs perpetual and term futures histories aligned to the snapshot set.
 - **Hedging pipeline** — `src/hedging_analysis.py` rebuilds model prices/deltas and creates interval hedging panels; `src/hedging_analytics.py` turns those outputs into chapter-ready tables and figures.
 - **Maintained notebook layer** — notebooks under `notebooks/` are the main reporting/orchestration layer for chapter 3 and chapter 4 outputs.
 - **Primary example notebooks** — `pricing_examples.ipynb` and `calibration_example.ipynb` are standalone walkthroughs for pricing and single-snapshot calibration.
-- **Documentation and generated artifacts** — `docs/` contains technical documentation and thesis materials, while `notebooks/chapter3_outputs/` and `hedging_output/hedging_chapter4/` contain generated reporting artifacts.
+- **Documentation and generated artifacts** — `docs/` contains technical/reproducibility documentation and thesis materials, while `notebooks/chapter3_outputs/` and `hedging_output/hedging_chapter4/` contain generated reporting artifacts.
 
 ## Runtime module guide (`src/`)
 
 - `src/__init__.py` — package marker for the runtime code.
+- `src/analysis_window.py` — inclusive UTC analysis-window normalization/filtering used to freeze empirical paper samples.
 - `src/inverse_fft_pricer.py` — characteristic functions, Carr-Madan FFT grids, inverse-option call/put pricing, cache helpers, and reference Black/Heston pricing routines.
 - `src/calibration.py` — liquid-quote filtering, residual weighting, per-expiry pricing plans, vectorized repricing, parameter transforms, and model calibration.
 - `src/snapshot_job.py` — one-snapshot orchestration: load CSV, filter data, split train/test, calibrate all models, price the filtered panel, and assemble Excel-ready payloads.
 - `src/results_store.py` — workbook schema definitions, append/load helpers, timestamp normalization, latest-success lookup, and atomic workbook flushes.
-- `src/batch_runner.py` — multi-snapshot, multi-currency orchestration with resume logic, warm starts, chunking, and ordered workbook commits.
+- `src/batch_runner.py` — multi-snapshot, multi-currency orchestration with resume logic, warm starts, explicit analysis-window filtering, chunking, and ordered workbook commits.
 - `src/collect_deribit_snapshot.py` — CLI collector for Deribit option snapshots and associated market data.
 - `src/backfill_futures_marks.py` — backfill utility for perpetual and term futures marks aligned to the existing snapshot set.
 - `src/hedging_analysis.py` — hedging engine that reloads calibration outputs, reconstructs prices/deltas, joins evaluation snapshots and perp data, and writes hedging workbooks.
@@ -124,6 +126,21 @@ python -m src.backfill_futures_marks --data-dir data
 - For a single snapshot with full control, use `src.snapshot_job.process_snapshot_to_payload(...)`.
 - For a full batch run to Excel, use `src.batch_runner.run_all_snapshots_to_excel(...)` or the notebook `notebooks/calibrate_all_to_excel.ipynb`.
 
+The `data/` directory is live and can contain observations collected after a research sample closes. Paper/thesis reruns must therefore set an explicit window. The submitted-thesis sample is frozen to the first/last snapshot filenames recorded in `docs/reproducibility/remediation_baseline.md`:
+
+```python
+from pathlib import Path
+from src.batch_runner import BatchConfig
+
+cfg = BatchConfig(
+    project_root=Path("."),
+    analysis_start="2025-12-30T17:31:15Z",
+    analysis_end="2026-04-08T10:01:19Z",
+)
+```
+
+Analysis-window filtering occurs before resume logic and smoke-test truncation. Date-only end values are interpreted as inclusive UTC calendar dates.
+
 The main calibration outputs are Excel workbooks such as:
 
 - `excel files/calibration_results_reg_0.xlsx`
@@ -137,6 +154,8 @@ The main calibration outputs are Excel workbooks such as:
 - `excel files/calibration_results_reg_250.xlsx`
 - `excel files/calibration_results_reg_500.xlsx`
 - `excel files/calibration_results_reg_1000.xlsx`
+
+Large workbook artifacts are stored externally; see `excel files/link.txt`.
 
 ### 3) Analyze calibration outputs
 
@@ -152,4 +171,7 @@ Generated hedging artifacts are written to `hedging_output/hedging_chapter4/`.
 ## Documentation
 
 - `docs/code_documentation.md` — technical documentation for runtime modules, notebook support code, orchestration scripts, and tests.
-- `docs/main.tex` and `docs/MASTERS_DIPLOM.pdf` — thesis materials and longer theoretical context.
+- `docs/reproducibility/remediation_baseline.md` — immutable pre-remediation sample/result provenance.
+- `docs/reproducibility/thesis_sample_manifest.csv` — compact manifest pinning the submitted-thesis sample index.
+- `docs/Pricing and Hedging Deribit Inverse Options under Affine Stochastic Volatility Models with Jumps.pdf` — submitted thesis PDF used as the pre-remediation manuscript baseline.
+- `docs/superpowers/` — the remediation design and implementation plan.
