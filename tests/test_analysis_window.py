@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tests._path import PROJECT_ROOT  # noqa: F401  (ensures project import path)
+from tests._path import ROOT as PROJECT_ROOT  # noqa: F401  (ensures project import path)
 from src.analysis_window import (
     filter_paths_by_timestamp,
     normalize_analysis_window,
@@ -41,10 +41,7 @@ class TestAnalysisWindow(unittest.TestCase):
             start="2025-12-30",
             end="2026-04-08",
         )
-        self.assertEqual(
-            actual,
-            self.files[1:5],
-        )
+        self.assertEqual(actual, self.files[1:5])
 
     def test_exact_timestamp_boundaries_are_included(self) -> None:
         actual = filter_paths_by_timestamp(
