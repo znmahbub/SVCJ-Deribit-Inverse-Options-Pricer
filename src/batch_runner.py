@@ -30,6 +30,11 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
+from .analysis_window import (
+    TimestampLike,
+    filter_paths_by_timestamp,
+    normalize_analysis_window,
+)
 from .calibration import WeightConfig
 from .inverse_fft_pricer import FFTParams
 from .results_store import (
@@ -69,12 +74,20 @@ class BatchConfig:
 
     The defaults are chosen to match the behaviour of the original
     ``calibrate_all_to_excel.ipynb`` notebook.
+
+    ``analysis_start`` and ``analysis_end`` freeze a paper/research run to an
+    explicit inclusive UTC window before resume logic or smoke-test truncation
+    is applied.  Date-only end values include the whole UTC calendar day.
     """
 
     # Paths
     project_root: Path
     data_dir: Optional[Path] = None
     output_xlsx: Optional[Path] = None
+
+    # Frozen empirical sample (inclusive UTC boundaries)
+    analysis_start: TimestampLike | None = None
+    analysis_end: TimestampLike | None = None
 
     # Resume / saving
     resume: bool = True
@@ -141,6 +154,10 @@ class BatchConfig:
         self.project_root = Path(self.project_root)
         self.data_dir = Path(self.data_dir)
         self.output_xlsx = Path(self.output_xlsx)
+        self.analysis_start, self.analysis_end = normalize_analysis_window(
+            self.analysis_start,
+            self.analysis_end,
+        )
         self.save_every_n_files = int(self.save_every_n_files)
         self.n_workers = int(self.n_workers)
 
@@ -240,6 +257,18 @@ def run_currency_to_excel(
         raise RuntimeError(f"No snapshot files found in {cfg.data_dir}")
 
     all_files_sorted = sorted(all_files, key=timestamp_from_filename)
+    all_files_sorted = filter_paths_by_timestamp(
+        all_files_sorted,
+        timestamp_from_filename,
+        start=cfg.analysis_start,
+        end=cfg.analysis_end,
+    )
+    if not all_files_sorted:
+        raise RuntimeError(
+            "No snapshot files fall inside the configured analysis window "
+            f"[{cfg.analysis_start}, {cfg.analysis_end}]"
+        )
+
     file_index_map = {p: i for i, p in enumerate(all_files_sorted)}
     currency_index = cfg.currencies.index(currency) if currency in cfg.currencies else 0
 
