@@ -32,12 +32,15 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
       - name: Apply Task 9 implementation
         run: python scripts/remediate_task9.py
+      - name: Refresh notebook integrity baseline for intentional final-notebook redesign
+        run: python tests/generate_notebook_reference_outputs.py
       - name: Verify Task 9 targeted
         run: |
           python -m unittest \
             tests.test_regularization_selection \
             tests.test_notebook_structure \
-            tests.test_notebook_integrity -v
+            tests.test_notebook_integrity \
+            tests.test_notebook_regression_outputs -v
       - name: Verify prior data-independent regressions
         run: |
           python -m unittest \
