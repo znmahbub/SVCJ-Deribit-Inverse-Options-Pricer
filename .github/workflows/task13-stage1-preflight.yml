@@ -5,6 +5,7 @@ on:
     branches: [task13-staged-rerun]
     paths:
       - .github/workflows/task13-stage1-preflight.yml
+      - tests/test_notebook_smoke.py
 
 jobs:
   preflight:
