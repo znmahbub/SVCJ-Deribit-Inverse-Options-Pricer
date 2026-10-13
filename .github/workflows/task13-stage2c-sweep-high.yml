@@ -28,6 +28,7 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       NUMEXPR_NUM_THREADS: '1'
     steps:
+      # Do not enter the expensive stage until the entire mid-lambda batch is green.
       - name: Wait for mid-lambda gate
         shell: bash
         run: |
