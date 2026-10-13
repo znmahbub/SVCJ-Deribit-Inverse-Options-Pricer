@@ -14,8 +14,8 @@ env:
 
 jobs:
   sweep:
-    # Exact sample membership is resolved by scripts/run_task9_candidate.py from
-    # the Task-1 pinned snapshot_currency_combos manifest, not endpoints alone.
+    # The candidate script uses the reconciled submitted-workbook endpoint:
+    # 388 snapshots ending 2026-04-08T05:03:27Z.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
