@@ -71,6 +71,26 @@ jobs:
       - name: Apply production changes
         run: python scripts/apply_tasks10_12.py
 
+      - name: Preserve final notebook structural heading
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('notebooks/calibration_results_final.ipynb')
+          nb = json.loads(path.read_text(encoding='utf-8'))
+          for cell in nb.get('cells', []):
+              if cell.get('id') == '82c47e29':
+                  source = list(cell.get('source', []))
+                  if not source:
+                      raise RuntimeError('Target markdown cell is empty')
+                  source[0] = '## 2. Load the baseline (`lambda_TS = 100`) and build snapshot-level pricing diagnostics\n'
+                  cell['source'] = source
+                  break
+          else:
+              raise RuntimeError('Could not locate final notebook baseline markdown cell')
+          path.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+          PY
+
       - name: Task 10 GREEN
         run: python -m unittest tests.test_chapter3_metrics -v
       - name: Task 11 GREEN
