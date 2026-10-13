@@ -1,0 +1,125 @@
+name: remediate-tasks-3-5
+
+on:
+  push:
+    branches:
+      - paper-code-remediation
+    paths:
+      - .github/workflows/remediate-tasks-3-5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.event.head_commit.message == 'chore: trigger tasks 3-5 remediation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout remediation branch
+        uses: actions/checkout@v4
+        with:
+          ref: paper-code-remediation
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbformat nbclient jupyter plotly ipykernel
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Task 3 RED — missing centralized Greek layer
+        run: |
+          if python -m unittest tests.test_measure_delta_identities -v; then
+            echo "Expected Task 3 regression to fail before implementation, but it passed."
+            exit 1
+          else
+            echo "Task 3 RED confirmed."
+          fi
+
+      - name: Implement Task 3
+        run: python scripts/remediate_task3.py
+
+      - name: Verify Task 3
+        run: |
+          python -m unittest \
+            tests.test_measure_delta_identities \
+            tests.test_sanity_pricing \
+            tests.test_hedging_invariants -v
+
+      - name: Commit Task 3
+        run: |
+          git add src tests docs
+          git commit -m "fix: separate pricing measure and numeraire delta logic"
+
+      - name: Task 4 RED — missing unified hedge mapping
+        run: |
+          if python -m unittest tests.test_hedge_mapping -v; then
+            echo "Expected Task 4 regression to fail before implementation, but it passed."
+            exit 1
+          else
+            echo "Task 4 RED confirmed."
+          fi
+
+      - name: Implement Task 4
+        run: python scripts/remediate_task4.py
+
+      - name: Verify Task 4
+        run: |
+          python -m unittest tests.test_hedge_mapping tests.test_hedging_invariants -v
+
+      - name: Commit Task 4
+        run: |
+          git add src tests docs
+          git commit -m "fix: unify inverse perpetual hedge notional mapping"
+
+      - name: Task 5 RED — bounded rho_j and missing contour admissibility
+        run: |
+          if python -m unittest tests.test_svcj_admissibility -v; then
+            echo "Expected Task 5 regression to fail before implementation, but it passed."
+            exit 1
+          else
+            echo "Task 5 RED confirmed."
+          fi
+
+      - name: Implement Task 5
+        run: python scripts/remediate_task5.py
+
+      - name: Verify Task 5 targeted
+        run: |
+          python -m unittest \
+            tests.test_svcj_admissibility \
+            tests.test_sanity_pricing \
+            tests.test_regression_reference_outputs -v
+
+      - name: Remove one-shot remediation machinery
+        run: |
+          git rm scripts/remediate_task3.py scripts/remediate_task4.py scripts/remediate_task5.py
+          git rm .github/workflows/remediate-tasks-3-5.yml
+
+      - name: Commit Task 5
+        run: |
+          git add -A
+          git commit -m "fix: correct SVCJ jump loading and FFT admissibility"
+
+      - name: Final full-suite verification
+        run: |
+          python -m unittest discover -s tests -v
+          test -z "$(git status --porcelain)"
+
+      - name: Show final commits
+        run: git log -8 --oneline
+
+      - name: Push completed remediation
+        run: git push origin HEAD:paper-code-remediation
