@@ -2,7 +2,7 @@
 
 These helpers are deliberately diagnostic. They do not alter the baseline
 calibration objective or pricing engine. Discounting scenarios apply a
- deterministic discount factor to the regular USD futures-option value and,
+deterministic discount factor to the regular USD futures-option value and,
 therefore, equivalently to the inverse coin premium after division by F0.
 """
 from __future__ import annotations
@@ -75,10 +75,9 @@ def build_discounting_sensitivity_table(
 
     The market quote is kept fixed. This is intentionally a *pricing-convention
     sensitivity* diagnostic, not a recalibration. Rows are reported separately
-    by currency and for a common ``All`` scope. Raw cross-asset coin RMSE is not
-    intended as a headline pooled statistic; it is retained here only as a
-    mechanical within-scenario diagnostic because Task 10 owns common-unit
-    cross-asset reporting.
+    by currency and for a mechanical ``All`` scope. The pooled raw-coin scope is
+    retained only for inspection and is never used for the promotion decision;
+    BTC and ETH coin units are not economically commensurate.
     """
     required = {"time_to_maturity", "mid_price_clean", "bid_price", "ask_price"}
     missing = required - set(quotes.columns)
@@ -134,18 +133,26 @@ def build_discounting_sensitivity_table(
 def assess_discounting_promotion(
     sensitivity: pd.DataFrame,
     *,
-    scope: str = "All",
+    scope: str,
     rmse_relative_threshold: float = 0.05,
     within_spread_absolute_threshold: float = 0.02,
 ) -> dict[str, object]:
-    """Apply the pre-Task-13 rule for promoting discounting to the baseline.
+    """Apply the pre-Task-13 discounting rule within one currency.
 
-    Promote if any plausible positive-rate scenario reverses the zero-rate RMSE
-    model ranking, changes any model's RMSE by at least 5% relative, or changes
-    within-spread share by at least 2 percentage points. Thresholds are explicit
-    so that the decision cannot be moved after seeing the results.
+    BTC and ETH coin RMSE values are different units, so a cross-asset raw-coin
+    RMSE must never decide whether discounting enters the baseline. Call this
+    function separately for BTC and ETH. Promotion is triggered if a plausible
+    positive-rate scenario reverses the within-currency zero-rate RMSE ranking,
+    changes any model's RMSE by at least 5% relative, or changes within-spread
+    share by at least 2 percentage points.
     """
-    frame = sensitivity.loc[sensitivity["scope"].astype(str) == str(scope)].copy()
+    scope_name = str(scope).upper()
+    if scope_name in {"ALL", "POOLED"}:
+        raise ValueError(
+            "cross-asset raw coin RMSE is not a valid discounting promotion criterion; "
+            "assess BTC and ETH separately"
+        )
+    frame = sensitivity.loc[sensitivity["scope"].astype(str).str.upper() == scope_name].copy()
     if frame.empty:
         raise ValueError(f"no discounting rows for scope={scope!r}")
     base = frame.loc[frame["rate"] == 0.0].set_index("model")
@@ -156,7 +163,7 @@ def assess_discounting_promotion(
     ranking_reversal = False
     max_rmse_relative_change = 0.0
     max_within_abs_change = 0.0
-    for rate, group in frame.loc[frame["rate"] > 0.0].groupby("rate"):
+    for _, group in frame.loc[frame["rate"] > 0.0].groupby("rate"):
         current = group.set_index("model")
         common = base.index.intersection(current.index)
         if len(common) < 2:
@@ -178,7 +185,7 @@ def assess_discounting_promotion(
         or max_within_abs_change >= float(within_spread_absolute_threshold)
     )
     return {
-        "scope": str(scope),
+        "scope": scope_name,
         "zero_rate_rmse_ranking": base_rank,
         "ranking_reversal": bool(ranking_reversal),
         "max_rmse_relative_change": float(max_rmse_relative_change),
