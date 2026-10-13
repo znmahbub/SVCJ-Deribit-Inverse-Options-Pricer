@@ -1,0 +1,50 @@
+name: tasks10-12-verification
+
+on:
+  push:
+    branches: [paper-code-remediation]
+    paths:
+      - tests/test_chapter3_metrics.py
+      - tests/test_perp_price_provenance.py
+      - tests/test_robustness_helpers.py
+      - notebooks/_lib/chapter3_final.py
+      - notebooks/_lib/chapter3_analysis.py
+      - notebooks/_lib/futures_viewer.py
+      - notebooks/_lib/robustness.py
+      - notebooks/calibration_results_final.ipynb
+      - notebooks/robustness_checks.ipynb
+      - src/backfill_futures_marks.py
+      - src/hedging_analysis.py
+      - README.md
+      - docs/code_documentation.md
+      - .github/workflows/tasks10-12-verification.yml
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: paper-code-remediation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tqdm nbformat plotly
+      - name: Task 10 metrics tests
+        run: python -m unittest tests.test_chapter3_metrics -v
+      - name: Task 11 provenance tests
+        run: python -m unittest tests.test_perp_price_provenance -v
+      - name: Task 12 robustness tests
+        run: python -m unittest tests.test_robustness_helpers -v
+      - name: Related regression tests
+        run: |
+          python -m unittest \
+            tests.test_hedge_mapping \
+            tests.test_hedging_invariants \
+            tests.test_notebook_integrity \
+            tests.test_notebook_structure -v
