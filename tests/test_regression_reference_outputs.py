@@ -25,7 +25,18 @@ class TestReferenceOutputsRegression(unittest.TestCase):
                 "Generate it via: python tests/generate_reference_outputs.py"
             )
 
-    def test_reference_outputs_match_exactly(self) -> None:
+    @staticmethod
+    def _assert_reference_float_array(actual: np.ndarray, expected: np.ndarray) -> None:
+        """Require agreement to one representable float (1 ULP).
+
+        Bitwise equality of FFT outputs is not portable across supported NumPy/
+        pocketfft builds. A one-ULP bound remains substantially stricter than an
+        application-level numerical tolerance while avoiding false regressions
+        from last-bit rounding differences.
+        """
+        npt.assert_array_max_ulp(actual, expected, maxulp=1)
+
+    def test_reference_outputs_match_to_one_ulp(self) -> None:
         case = build_reference_case()
         ref = np.load(REFERENCE_NPZ_PATH, allow_pickle=False)
 
@@ -57,8 +68,8 @@ class TestReferenceOutputsRegression(unittest.TestCase):
                 fft_params=case.fft_params,
                 use_cache=False,
             )
-            npt.assert_array_equal(got_call, ref[f"{model}_call_coin"])
-            npt.assert_array_equal(got_put, ref[f"{model}_put_coin"])
+            self._assert_reference_float_array(got_call, ref[f"{model}_call_coin"])
+            self._assert_reference_float_array(got_put, ref[f"{model}_put_coin"])
 
         # price_dataframe outputs
         for model, params in [
@@ -75,7 +86,7 @@ class TestReferenceOutputsRegression(unittest.TestCase):
                 fft_params_by_expiry=case.fft_params_by_expiry,
                 use_cache=False,
             )
-            npt.assert_array_equal(got_df, ref[f"df_{model}_coin"])
+            self._assert_reference_float_array(got_df, ref[f"df_{model}_coin"])
 
         # Raw black FFT grid outputs
         K_grid, C_grid = carr_madan_call_fft(
@@ -85,10 +96,9 @@ class TestReferenceOutputsRegression(unittest.TestCase):
             (case.black_params["sigma"],),
             case.fft_params,
         )
-        npt.assert_array_equal(K_grid, ref["black_fft_K_grid"])
-        npt.assert_array_equal(C_grid, ref["black_fft_C_grid_usd"])
+        self._assert_reference_float_array(K_grid, ref["black_fft_K_grid"])
+        self._assert_reference_float_array(C_grid, ref["black_fft_C_grid_usd"])
 
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
-
