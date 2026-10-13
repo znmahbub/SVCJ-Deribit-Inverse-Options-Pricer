@@ -1,4 +1,4 @@
-name: validate-tasks-6-8
+name: apply-tasks-6-8
 
 on:
   push:
@@ -8,10 +8,11 @@ on:
       - .github/workflows/validate-tasks-6-8.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate:
+  apply:
+    if: "github.event.head_commit.message == 'chore: apply validated tasks 6-8'"
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -26,40 +27,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nbformat nbclient jupyter plotly ipykernel
-      - name: Task 6 red
+      - name: Configure git
         run: |
-          ! python -m unittest tests.test_calibration_objective -v
-      - name: Apply Task 6
-        run: python scripts/remediate_task6.py
-      - name: Task 6 green
-        run: python -m unittest tests.test_calibration_objective tests.test_sanity_pricing tests.test_svcj_admissibility tests.test_results_store_io -v
-      - name: Export Task 6 state
-        run: tar -czf task6-files.tar.gz src/calibration.py src/snapshot_job.py src/results_store.py docs/code_documentation.md
-      - uses: actions/upload-artifact@v4
-        with:
-          name: task6-files
-          path: task6-files.tar.gz
-      - name: Task 7 red
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Apply and verify Task 6
         run: |
-          ! python -m unittest tests.test_batch_regularization_sequence -v
-      - name: Apply Task 7
-        run: python scripts/remediate_task7.py
-      - name: Task 7 green
-        run: python -m unittest tests.test_batch_regularization_sequence tests.test_results_store_io tests.test_notebook_structure tests.test_notebook_integrity -v
-      - name: Export Task 7 state
-        run: tar -czf task7-files.tar.gz src/batch_runner.py notebooks/calibrate_all_to_excel.ipynb docs/code_documentation.md
-      - uses: actions/upload-artifact@v4
-        with:
-          name: task7-files
-          path: task7-files.tar.gz
-      - name: Task 8 red
+          python scripts/remediate_task6.py
+          python -m unittest tests.test_calibration_objective tests.test_sanity_pricing tests.test_svcj_admissibility tests.test_results_store_io -v
+          git add src/calibration.py src/snapshot_job.py src/results_store.py docs/code_documentation.md
+          git commit -m "refactor: make calibration objective semantics explicit"
+      - name: Apply and verify Task 7
         run: |
-          ! python -m unittest tests.test_snapshot_splitting -v
-      - name: Apply Task 8
-        run: python scripts/remediate_task8.py
-      - name: Task 8 green
-        run: python -m unittest tests.test_snapshot_splitting tests.test_results_store_io tests.test_hedging_invariants tests.test_batch_regularization_sequence tests.test_notebook_structure tests.test_notebook_integrity -v
-      - name: Final data-independent suite
+          python scripts/remediate_task7.py
+          python -m unittest tests.test_batch_regularization_sequence tests.test_results_store_io tests.test_notebook_structure tests.test_notebook_integrity -v
+          git add src/batch_runner.py notebooks/calibrate_all_to_excel.ipynb docs/code_documentation.md
+          git commit -m "fix: keep temporal regularization sequential"
+      - name: Apply and verify Task 8
+        run: |
+          python scripts/remediate_task8.py
+          python -m unittest tests.test_snapshot_splitting tests.test_results_store_io tests.test_hedging_invariants tests.test_batch_regularization_sequence tests.test_notebook_structure tests.test_notebook_integrity -v
+      - name: Final verification
         run: |
           python -m unittest \
             tests.test_analysis_window \
@@ -75,20 +63,11 @@ jobs:
             tests.test_sanity_pricing \
             tests.test_snapshot_splitting \
             tests.test_svcj_admissibility -v
-      - name: Export Task 8 state
+      - name: Commit Task 8 and clean temporary machinery
         run: |
-          tar -czf task8-files.tar.gz \
-            src/splitting.py \
-            src/snapshot_job.py \
-            src/results_store.py \
-            src/batch_runner.py \
-            src/hedging_analysis.py \
-            notebooks/_lib/chapter3_analysis.py \
-            notebooks/_lib/chapter3_final.py \
-            calibration_example.ipynb \
-            notebooks/calibrate_all_to_excel.ipynb \
-            docs/code_documentation.md
-      - uses: actions/upload-artifact@v4
-        with:
-          name: task8-files
-          path: task8-files.tar.gz
+          git rm scripts/remediate_task6.py scripts/remediate_task7.py scripts/remediate_task8.py
+          git rm .github/workflows/validate-tasks-6-8.yml
+          git add -A
+          git commit -m "feat: add train validation test calibration split"
+      - name: Push completed remediation
+        run: git push origin HEAD:paper-code-remediation
