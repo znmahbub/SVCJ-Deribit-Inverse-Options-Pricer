@@ -13,16 +13,22 @@ This file freezes the pre-remediation empirical state so that corrected reruns c
 
 ## Frozen thesis sample
 
-The submitted thesis states that the option panel covers **30 December 2025 through 8 April 2026** and contains **388 snapshots**, collected roughly four times per day. The local snapshot-index file pins the exact observed endpoints used by the repository:
+The submitted thesis states that the option panel covers **30 December 2025 through 8 April 2026** and contains **388 snapshots**, collected roughly four times per day.
+
+During Task 9, the original submitted calibration workbook was re-opened to verify the exact timestamp set rather than relying only on the live-data index. That workbook contains exactly **776 `black_params` rows = 388 BTC + 388 ETH timestamps**, from `2025-12-30T17:31:15Z` through `2026-04-08T05:03:27Z`. Heston has the same 776 rows/timestamps; SVCJ has the same timestamp rows with one unsuccessful calibration. The later file `deribit_options_snapshot_20260408T100119Z.csv` is present in the repository data/index but is **not part of the submitted-thesis calibration sample**.
+
+Accordingly, the corrected frozen sample is:
 
 - First snapshot file: `deribit_options_snapshot_20251230T173115Z.csv`
 - Frozen analysis start: `2025-12-30T17:31:15Z`
-- Last snapshot file: `deribit_options_snapshot_20260408T100119Z.csv`
-- Frozen analysis end: `2026-04-08T10:01:19Z`
+- Last snapshot file: `deribit_options_snapshot_20260408T050327Z.csv`
+- Frozen analysis end: `2026-04-08T05:03:27Z`
 - Expected unique option-surface snapshots: `388`
 - Expected snapshot/currency rows when both BTC and ETH are present: `776`
 
-For remediation runs, pass these exact inclusive bounds through `BatchConfig.analysis_start` and `BatchConfig.analysis_end`. This prevents snapshots collected after the thesis endpoint from silently entering a rerun.
+The submitted baseline workbook used for this reconciliation is `calibration_results_reg_100.xlsx` in the linked Drive folder; the downloaded raw file used for the audit had SHA-256 `25513dea0ec8e0dc8b2a89e07e933063b7f9aac3eb2dc9a3f26889b0d70486e2`.
+
+For remediation runs, pass these exact inclusive bounds through `BatchConfig.analysis_start` and `BatchConfig.analysis_end`. This prevents snapshots collected after the submitted thesis endpoint from silently entering a rerun.
 
 ### Immutable data anchors at the branch point
 
@@ -33,7 +39,7 @@ For remediation runs, pass these exact inclusive bounds through `BatchConfig.ana
 | `data/perpetual_futures_prices.csv` | `2e1efb874574cb9fd9d52c94e1bb475733c8845c` |
 | `data/term_futures_marks.csv` | `082940cd35c643a3d71b8fcf8a6d922ea137bedc` |
 
-`docs/reproducibility/thesis_sample_manifest.csv` is a compact immutable manifest. Exact snapshot membership is defined by the unique `snapshot_file` values in `data/snapshot_currency_combos.csv` at the Git blob above, restricted to the inclusive start/end bounds. This avoids duplicating hundreds of filenames while still fixing the exact bytes that define membership.
+`docs/reproducibility/thesis_sample_manifest.csv` records the corrected exact endpoint and the submitted-workbook provenance. The repository index contains a later same-day snapshot at `2026-04-08T10:01:19Z`; endpoint filtering at `2026-04-08T05:03:27Z` intentionally excludes it.
 
 ## Submitted-thesis benchmark specification
 
