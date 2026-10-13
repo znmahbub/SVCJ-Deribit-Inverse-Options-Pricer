@@ -1,0 +1,72 @@
+name: validate-tasks-6-8
+
+on:
+  push:
+    branches:
+      - paper-code-remediation
+    paths:
+      - .github/workflows/validate-tasks-6-8.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: paper-code-remediation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbformat nbclient jupyter plotly ipykernel
+      - name: Task 6 red
+        run: |
+          ! python -m unittest tests.test_calibration_objective -v
+      - name: Apply Task 6
+        run: python scripts/remediate_task6.py
+      - name: Task 6 green
+        run: python -m unittest tests.test_calibration_objective tests.test_sanity_pricing tests.test_svcj_admissibility tests.test_results_store_io -v
+      - name: Task 7 red
+        run: |
+          ! python -m unittest tests.test_batch_regularization_sequence -v
+      - name: Apply Task 7
+        run: python scripts/remediate_task7.py
+      - name: Task 7 green
+        run: python -m unittest tests.test_batch_regularization_sequence tests.test_results_store_io tests.test_notebook_structure tests.test_notebook_integrity -v
+      - name: Task 8 red
+        run: |
+          ! python -m unittest tests.test_snapshot_splitting -v
+      - name: Apply Task 8
+        run: python scripts/remediate_task8.py
+      - name: Task 8 green
+        run: python -m unittest tests.test_snapshot_splitting tests.test_results_store_io tests.test_hedging_invariants tests.test_batch_regularization_sequence tests.test_notebook_structure tests.test_notebook_integrity -v
+      - name: Final data-independent suite
+        run: |
+          python -m unittest \
+            tests.test_analysis_window \
+            tests.test_batch_regularization_sequence \
+            tests.test_calibration_objective \
+            tests.test_hedge_mapping \
+            tests.test_hedging_invariants \
+            tests.test_measure_delta_identities \
+            tests.test_notebook_integrity \
+            tests.test_notebook_structure \
+            tests.test_regression_reference_outputs \
+            tests.test_results_store_io \
+            tests.test_sanity_pricing \
+            tests.test_snapshot_splitting \
+            tests.test_svcj_admissibility -v
+      - name: Save patch
+        run: |
+          git diff --binary > tasks-6-8.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasks-6-8-patch
+          path: tasks-6-8.patch
