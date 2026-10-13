@@ -9,10 +9,18 @@ from tests.notebook_utils import execute_notebook_in_memory, execute_notebook_wi
 
 
 NOTEBOOK_DIR = ROOT / "notebooks"
+EXCEL_DIR = ROOT / "excel files"
+SELECTION_RECORD = ROOT / "docs" / "reproducibility" / "regularization_selection.md"
 
 
 def code_output_count(notebook) -> int:
     return sum(len(cell.get("outputs", [])) for cell in notebook.cells if cell.cell_type == "code")
+
+
+def regularization_is_locked() -> bool:
+    if not SELECTION_RECORD.exists():
+        return False
+    return "- Status: LOCKED" in SELECTION_RECORD.read_text(encoding="utf-8")
 
 
 class NotebookSmokeTests(unittest.TestCase):
@@ -23,6 +31,12 @@ class NotebookSmokeTests(unittest.TestCase):
             self.skipTest(f"Notebook execution is not permitted in this environment: {exc}")
 
     def test_regularization_notebook_executes(self) -> None:
+        required = EXCEL_DIR / "calibration_results_reg_100.xlsx"
+        if not required.exists():
+            self.skipTest(
+                "Legacy regularization-analysis smoke requires the external "
+                f"workbook {required.name}, which is intentionally not versioned."
+            )
         notebook = self._execute_or_skip(
             execute_notebook_in_memory,
             NOTEBOOK_DIR / "calibration_analysis_complete_reg_100.ipynb",
@@ -32,6 +46,11 @@ class NotebookSmokeTests(unittest.TestCase):
         self.assertGreater(code_output_count(notebook), 20)
 
     def test_chapter3_final_notebook_executes(self) -> None:
+        if not regularization_is_locked():
+            self.skipTest(
+                "Final Chapter 3 reporting is intentionally gated until the "
+                "validation-only regularization selection record is LOCKED."
+            )
         notebook = self._execute_or_skip(
             execute_notebook_in_memory,
             NOTEBOOK_DIR / "calibration_results_final.ipynb",
@@ -50,6 +69,12 @@ class NotebookSmokeTests(unittest.TestCase):
         self.assertGreater(code_output_count(notebook), 4)
 
     def test_hedging_notebook_executes_saved_output_mode(self) -> None:
+        required = EXCEL_DIR / "hedging_results.xlsx"
+        if not required.exists():
+            self.skipTest(
+                "Saved-output hedging smoke requires the external workbook "
+                f"{required.name}, which is intentionally not versioned."
+            )
         notebook = self._execute_or_skip(
             execute_notebook_with_replacements,
             NOTEBOOK_DIR / "hedging_analytics.ipynb",
