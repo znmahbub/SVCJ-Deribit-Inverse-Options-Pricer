@@ -26,7 +26,7 @@ from src.snapshot_job import process_snapshot_to_payload, timestamp_from_filenam
 
 
 ANALYSIS_START = pd.Timestamp("2025-12-30T17:31:15Z")
-ANALYSIS_END = pd.Timestamp("2026-04-08T10:01:19Z")
+ANALYSIS_END = pd.Timestamp("2026-04-08T05:03:27Z")
 EXPECTED_SNAPSHOTS = 388
 GLOBAL_SEED = 123
 CURRENCIES = ("BTC", "ETH")
@@ -59,13 +59,14 @@ MAX_NFEV = dict(black=250, heston=250, svcj=250)
 
 
 def _frozen_snapshot_files(project_root: Path) -> list[Path]:
-    """Return exact thesis-sample membership from the pinned combo manifest.
+    """Return the exact 388-snapshot submitted-thesis sample.
 
-    The inclusive timestamp bounds alone currently contain one additional CSV.
-    Task 1 defined the authoritative membership as the unique ``snapshot_file``
-    set in ``data/snapshot_currency_combos.csv`` inside the frozen bounds, so
-    the selection sweep follows that definition rather than treating every
-    file that happens to lie between the endpoint timestamps as in-sample.
+    Task 9 reconciled the Task-1 endpoint against the submitted baseline
+    `calibration_results_reg_100.xlsx`: its parameter sheets contain 388
+    timestamps per currency and end at 2026-04-08T05:03:27Z. The repository
+    contains a later same-day snapshot at 10:01:19Z that was not part of those
+    submitted calibrations. We apply the corrected endpoint and also require
+    membership in the repository snapshot index as a consistency check.
     """
     data_dir = project_root / "data"
     combos_path = data_dir / "snapshot_currency_combos.csv"
@@ -83,8 +84,8 @@ def _frozen_snapshot_files(project_root: Path) -> list[Path]:
 
     if len(files) != EXPECTED_SNAPSHOTS:
         raise RuntimeError(
-            "Frozen manifest expected "
-            f"{EXPECTED_SNAPSHOTS} snapshots, found {len(files)} after exact membership filtering"
+            "Frozen submitted-thesis sample expected "
+            f"{EXPECTED_SNAPSHOTS} snapshots, found {len(files)}"
         )
     if len({path.name for path in files}) != EXPECTED_SNAPSHOTS:
         raise RuntimeError("Frozen snapshot membership contains duplicate filenames")
