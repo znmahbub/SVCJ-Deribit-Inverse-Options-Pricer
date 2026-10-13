@@ -38,6 +38,10 @@ COLORS = {
 
 FIGDIMS = dict(width=1200, height=1100)
 
+HOLDOUT_INFERENCE_LABEL = (
+    "snapshot-level cross-sectional holdout loss differential with HAC standard errors"
+)
+
 # Small positive floor used to avoid division-by-zero in relative metrics
 # (within-spread rate, sMAPE, Feller ratio).
 EPS = 1e-12
@@ -75,7 +79,8 @@ BOUNDS = {
         "ell_y": (-5.0, 5.0),
         "sigma_y": (1e-4, 5.0),
         "ell_v": (1e-6, 10.0),
-        "rho_j": (RHO_LB, RHO_UB),
+        # rho_j is an unbounded jump-size loading; moment-domain diagnostics
+        # replace the obsolete [-1,1] boundary diagnostic.
     },
 }
 
@@ -407,7 +412,8 @@ def plot_error_boxplots(results_long_df: pd.DataFrame, currency: str, *, split: 
     add_subplot_legend(fig, 2, 1, ["Heston", "SVCJ"])
     add_subplot_legend(fig, 2, 2, ["Heston", "SVCJ"])
 
-    fig.update_layout(title=f"{currency} — {split.title()} error boxplots (snapshot-level)", showlegend=False, **FIGDIMS)
+    split_label = "Training" if split == "train" else f"{split.title()} cross-sectional holdout"
+    fig.update_layout(title=f"{currency} — {split_label} error boxplots (snapshot-level)", showlegend=False, **FIGDIMS)
     fig.update_yaxes(title_text="RMSE (coin premium)", row=1, col=1)
     fig.update_yaxes(title_text="MAE (coin premium)", row=1, col=2)
     fig.update_yaxes(title_text="RMSE (coin premium)", row=2, col=1)
@@ -548,7 +554,8 @@ def spread_metric_timeseries(opt_metrics_df: pd.DataFrame, currency: str, *, spl
     add_subplot_legend(fig, 2, 1, ["Black", "Heston", "SVCJ"])
     add_subplot_legend(fig, 2, 2, ["Black", "Heston", "SVCJ"])
 
-    fig.update_layout(title=f"{currency} — {split.title()} spread-relative diagnostics (per snapshot)", showlegend=False, width=1200, height=900)
+    split_label = "Training" if split == "train" else f"{split.title()} cross-sectional holdout"
+    fig.update_layout(title=f"{currency} — {split_label} spread-relative diagnostics (per snapshot)", showlegend=False, width=1200, height=900)
     return fig
 
 

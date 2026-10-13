@@ -52,66 +52,168 @@ def bucketize_equal_count(series: pd.Series, *, n_buckets: int = 5) -> pd.Series
     return pd.qcut(ranked, q=n_buckets, labels=equal_count_bucket_labels(n_buckets))
 
 
-def compute_regularisation_summary(files: list[Path], output_dir: Path) -> pd.DataFrame:
-    rows = []
-    selected = ["kappa", "theta", "sigma_v", "rho", "v0", "lam", "ell_y", "sigma_y", "ell_v", "rho_j"]
+def compute_regularisation_summary(
+    files: list[Path],
+    output_dir: Path,
+    *,
+    evaluation_split: str,
+) -> pd.DataFrame:
+    """Summarise an SVCJ regularisation sweep on one explicit data split.
 
+    The selection workflow calls this with ``evaluation_split='validation'``.
+    Only columns belonging to the requested split are loaded from ``svcj_params``;
+    in particular validation selection does not read ``rmse_test``/``mae_test``.
+    """
+    split = str(evaluation_split).lower()
+    if split not in {"train", "validation", "test"}:
+        raise ValueError("evaluation_split must be train, validation, or test")
+
+    metric_cols = [f"rmse_{split}", f"mae_{split}"]
+    selected = ["kappa", "theta", "sigma_v", "rho", "v0", "lam", "ell_y", "sigma_y", "ell_v", "rho_j"]
+    diagnostic_cols = [
+        "timestamp",
+        "currency",
+        "success",
+        "nfev",
+        *metric_cols,
+        *selected,
+        "feller_gap",
+        "feller_violated",
+        "svcj_martingale_margin",
+        "svcj_martingale_violated",
+        "svcj_contour_margin",
+        "svcj_contour_violated",
+    ]
+
+    rows = []
     for path in files:
         reg = reg_from_path(path)
-        svcj = pd.read_excel(path, sheet_name="svcj_params")
+        svcj = pd.read_excel(path, sheet_name="svcj_params", usecols=diagnostic_cols)
         svcj["timestamp"] = pd.to_datetime(svcj["timestamp"], utc=True)
-        svcj["feller_gap"] = 2 * svcj["kappa"] * svcj["theta"] - svcj["sigma_v"] ** 2
+        ok = svcj.loc[svcj["success"] == True].copy()
 
         roughness_terms: list[float] = []
-        for _, group in svcj.sort_values("timestamp").groupby("currency"):
+        for _, group in ok.sort_values("timestamp").groupby("currency"):
             for param in selected:
-                series = group[param].astype(float)
+                series = pd.to_numeric(group[param], errors="coerce").dropna()
+                if len(series) < 2:
+                    continue
                 iqr = series.quantile(0.75) - series.quantile(0.25)
                 scale = iqr if pd.notna(iqr) and iqr > _EPS_SCALE else series.std()
                 if pd.isna(scale) or scale <= _EPS_SCALE:
                     continue
                 roughness_terms.append(float(series.diff().abs().median() / scale))
 
+        def _share(column: str) -> float:
+            values = pd.to_numeric(ok[column], errors="coerce")
+            return float(values.mean()) if len(values) else float("nan")
+
+        def _minimum(column: str) -> float:
+            values = pd.to_numeric(ok[column], errors="coerce")
+            values = values[np.isfinite(values)]
+            return float(values.min()) if len(values) else float("nan")
+
         rows.append(
             {
                 "reg": reg,
-                "rmse_test_mean": float(svcj["rmse_test"].mean()),
-                "mae_test_mean": float(svcj["mae_test"].mean()),
-                "nfev_mean": float(svcj["nfev"].mean()),
-                "nfev_median": float(svcj["nfev"].median()),
-                "roughness_mean": float(np.mean(roughness_terms)),
-                "feller_violation_share": float((svcj["feller_gap"] < 0).mean()),
-                "rho_boundary_share": float((svcj["rho"].abs() > 0.95).mean()),
-                "rhoj_boundary_share": float((svcj["rho_j"].abs() > 0.95).mean()),
+                f"rmse_{split}_mean": float(pd.to_numeric(ok[f"rmse_{split}"], errors="coerce").mean()),
+                f"mae_{split}_mean": float(pd.to_numeric(ok[f"mae_{split}"], errors="coerce").mean()),
+                "success_rate": float(pd.to_numeric(svcj["success"], errors="coerce").mean()),
+                "nfev_mean": float(pd.to_numeric(ok["nfev"], errors="coerce").mean()),
+                "nfev_median": float(pd.to_numeric(ok["nfev"], errors="coerce").median()),
+                "roughness_mean": float(np.mean(roughness_terms)) if roughness_terms else float("nan"),
+                "feller_violation_share": _share("feller_violated"),
+                "svcj_martingale_violation_share": _share("svcj_martingale_violated"),
+                "svcj_contour_violation_share": _share("svcj_contour_violated"),
+                "svcj_martingale_margin_min": _minimum("svcj_martingale_margin"),
+                "svcj_contour_margin_min": _minimum("svcj_contour_margin"),
+                "rho_boundary_share": float((pd.to_numeric(ok["rho"], errors="coerce").abs() > 0.95).mean()),
             }
         )
 
     out = pd.DataFrame(rows).sort_values("reg").reset_index(drop=True)
-    out.to_csv(output_dir / "regularisation_summary.csv", index=False)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out.to_csv(output_dir / f"regularisation_summary_{split}.csv", index=False)
     return out
 
 
-def build_regularisation_tradeoff_figure(reg_summary: pd.DataFrame, *, final_reg: int, output_dir: Path) -> go.Figure:
+def select_regularisation_candidate(reg_summary: pd.DataFrame) -> int:
+    """Choose lambda_TS using validation metrics only.
+
+    Primary criterion: mean validation RMSE. Exact ties are resolved by mean
+    validation MAE, parameter-path roughness, mean optimiser evaluations, then
+    the smaller lambda. Test-set columns are deliberately neither required nor
+    consulted.
+    """
+    required = {
+        "reg",
+        "rmse_validation_mean",
+        "mae_validation_mean",
+        "roughness_mean",
+        "nfev_mean",
+    }
+    missing = required - set(reg_summary.columns)
+    if missing:
+        raise ValueError(
+            "regularisation selection requires validation-only summary columns; "
+            f"missing {sorted(missing)}"
+        )
+
+    work = reg_summary[list(required)].copy()
+    for col in required:
+        work[col] = pd.to_numeric(work[col], errors="coerce")
+    work = work[np.isfinite(work["reg"]) & np.isfinite(work["rmse_validation_mean"])].copy()
+    if work.empty:
+        raise ValueError("no finite validation candidates are available")
+
+    # NaN tie-break diagnostics should lose to finite values but must never
+    # change the primary validation-RMSE ordering.
+    for col in ["mae_validation_mean", "roughness_mean", "nfev_mean"]:
+        work[col] = work[col].fillna(np.inf)
+    work = work.sort_values(
+        ["rmse_validation_mean", "mae_validation_mean", "roughness_mean", "nfev_mean", "reg"],
+        kind="mergesort",
+    )
+    value = float(work.iloc[0]["reg"])
+    if not value.is_integer():
+        raise ValueError("current workbook naming convention requires integer lambda_TS candidates")
+    return int(value)
+
+
+def build_regularisation_tradeoff_figure(
+    reg_summary: pd.DataFrame,
+    *,
+    final_reg: int,
+    output_dir: Path,
+    evaluation_split: str,
+) -> go.Figure:
+    """Plot the validation-only regularisation trade-off used for selection."""
+    split = str(evaluation_split).lower()
+    if split != "validation":
+        raise ValueError("regularisation selection figures must use the validation split")
+    rmse_col = "rmse_validation_mean"
+
     fig = make_subplots(
         rows=1,
         cols=2,
         horizontal_spacing=0.20,
         specs=[[{"secondary_y": True}, {"secondary_y": False}]],
     )
+    x_labels = reg_summary["reg"].astype(str)
 
     fig.add_trace(
         go.Scatter(
-            x=reg_summary["reg"],
-            y=reg_summary["rmse_test_mean"],
+            x=x_labels,
+            y=reg_summary[rmse_col],
             mode="lines+markers+text",
-            name="Mean test RMSE",
-            text=reg_summary["reg"].astype(str),
+            name="Mean validation RMSE",
+            text=x_labels,
             textposition="top center",
             textfont=dict(size=10),
             cliponaxis=False,
             line=dict(color="#111827", width=2),
             marker=dict(size=8),
-            hovertemplate="λ_TS=%{x}<br>Mean test RMSE=%{y:.6f}<extra></extra>",
+            hovertemplate="lambda_TS=%{x}<br>Mean validation RMSE=%{y:.6f}<extra></extra>",
         ),
         row=1,
         col=1,
@@ -119,13 +221,13 @@ def build_regularisation_tradeoff_figure(reg_summary: pd.DataFrame, *, final_reg
     )
     fig.add_trace(
         go.Scatter(
-            x=reg_summary["reg"],
+            x=x_labels,
             y=reg_summary["nfev_mean"],
             mode="lines+markers",
             name="Mean function evaluations",
             line=dict(color="#2563eb", width=2, dash="dash"),
             marker=dict(size=8),
-            hovertemplate="λ_TS=%{x}<br>Mean function evaluations=%{y:.2f}<extra></extra>",
+            hovertemplate="lambda_TS=%{x}<br>Mean function evaluations=%{y:.2f}<extra></extra>",
         ),
         row=1,
         col=1,
@@ -133,41 +235,59 @@ def build_regularisation_tradeoff_figure(reg_summary: pd.DataFrame, *, final_reg
     )
     fig.add_trace(
         go.Scatter(
-            x=reg_summary["reg"],
+            x=x_labels,
             y=reg_summary["roughness_mean"],
             mode="lines+markers+text",
             name="Roughness index",
-            text=reg_summary["reg"].astype(str),
+            text=x_labels,
             textposition="top center",
             textfont=dict(size=10),
             cliponaxis=False,
             line=dict(color="#dc2626", width=2),
             marker=dict(size=8),
-            hovertemplate="λ_TS=%{x}<br>Roughness index=%{y:.4f}<extra></extra>",
+            hovertemplate="lambda_TS=%{x}<br>Roughness index=%{y:.4f}<extra></extra>",
         ),
         row=1,
         col=2,
     )
 
-    for col in [1, 2]:
-        fig.add_vline(x=final_reg, line_width=1.5, line_dash="dot", line_color="#dc2626", row=1, col=col)
+    selected_label = str(int(final_reg))
+    selected_positions = np.flatnonzero(x_labels.to_numpy() == selected_label)
+    if len(selected_positions):
+        selected_x = selected_label
+        for col in [1, 2]:
+            fig.add_vline(x=selected_x, line_width=1.5, line_dash="dot", line_color="#dc2626", row=1, col=col)
 
-    tickvals = reg_summary["reg"].tolist()
-    ticktext = [str(value) for value in tickvals]
-    fig.update_xaxes(type="log", tickvals=tickvals, ticktext=ticktext, title_text="λ_TS (log scale)", row=1, col=1, showgrid=True)
-    fig.update_xaxes(type="log", tickvals=tickvals, ticktext=ticktext, title_text="λ_TS (log scale)", row=1, col=2, showgrid=True)
-    fig.update_yaxes(title_text="Mean test RMSE", row=1, col=1, secondary_y=False, tickformat=".5f", showgrid=True)
+    fig.update_xaxes(type="category", title_text="lambda_TS candidate", row=1, col=1, showgrid=True)
+    fig.update_xaxes(type="category", title_text="lambda_TS candidate", row=1, col=2, showgrid=True)
+    fig.update_yaxes(title_text="Mean validation RMSE", row=1, col=1, secondary_y=False, tickformat=".5f", showgrid=True)
     fig.update_yaxes(title_text="Mean function evaluations", row=1, col=1, secondary_y=True, showgrid=False)
     fig.update_yaxes(title_text="Roughness index", row=1, col=2, showgrid=True)
 
-    style_figure(fig, height=520, title="Regularisation trade-off across the SVCJ sweep", legend_y=1.10)
+    style_figure(fig, height=520, title="Validation-only regularisation trade-off across the SVCJ sweep", legend_y=1.10)
     fig.update_layout(
         margin=dict(t=95, b=70, l=70, r=70),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
         hovermode="x unified",
     )
-    save_figure(fig, output_dir, "regularisation_tradeoff")
+    save_figure(fig, output_dir, "regularisation_tradeoff_validation")
     return fig
+
+
+def load_locked_regularisation(record_path: Path) -> int:
+    """Read the committed lambda_TS lock; refuse pending/unlocked records."""
+    path = Path(record_path)
+    text = path.read_text(encoding="utf-8")
+    status_match = re.search(r"^\s*-\s*Status:\s*([A-Za-z_]+)\s*$", text, flags=re.MULTILINE)
+    status = status_match.group(1).upper() if status_match else ""
+    if status != "LOCKED":
+        raise RuntimeError(
+            f"regularisation selection is not locked in {path}; run the validation-only selection workflow first"
+        )
+    value_match = re.search(r"^\s*-\s*Selected\s+lambda_TS:\s*(\d+)\s*$", text, flags=re.MULTILINE)
+    if not value_match:
+        raise RuntimeError(f"locked regularisation record {path} has no integer Selected lambda_TS value")
+    return int(value_match.group(1))
 
 
 def load_baseline_workbook(baseline_path: Path, *, evaluation_split: str = "test") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
