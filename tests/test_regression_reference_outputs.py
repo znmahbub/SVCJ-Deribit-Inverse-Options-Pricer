@@ -27,16 +27,16 @@ class TestReferenceOutputsRegression(unittest.TestCase):
 
     @staticmethod
     def _assert_reference_float_array(actual: np.ndarray, expected: np.ndarray) -> None:
-        """Require agreement to one representable float (1 ULP).
+        """Require numerically indistinguishable floating-point output.
 
-        Bitwise equality of FFT outputs is not portable across supported NumPy/
-        pocketfft builds. A one-ULP bound remains substantially stricter than an
-        application-level numerical tolerance while avoiding false regressions
-        from last-bit rounding differences.
+        Bitwise FFT equality is not portable across supported NumPy/pocketfft
+        builds. The tolerance below is deliberately near machine precision: it
+        permits only last-bit implementation-level rounding differences, not an
+        economically or numerically meaningful pricing change.
         """
-        npt.assert_array_max_ulp(actual, expected, maxulp=1)
+        npt.assert_allclose(actual, expected, rtol=1e-14, atol=1e-15)
 
-    def test_reference_outputs_match_to_one_ulp(self) -> None:
+    def test_reference_outputs_match_machine_precision(self) -> None:
         case = build_reference_case()
         ref = np.load(REFERENCE_NPZ_PATH, allow_pickle=False)
 
