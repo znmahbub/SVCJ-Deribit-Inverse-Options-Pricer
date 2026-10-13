@@ -101,6 +101,7 @@ def _frozen_snapshot_files(project_root: Path) -> list[Path]:
 
 
 def _svcj_seed_from_black_sigma(sigma: float) -> dict[str, float]:
+    """Match ``snapshot_job._init_svcj_from_black`` when no SVCJ warm start exists."""
     sigma = float(sigma)
     sigma2 = sigma * sigma
     return {
@@ -177,13 +178,19 @@ def _prepare_snapshot(path: Path, *, currency: str, seed: int):
     return filt, train, validation, test, fft_params_by_expiry
 
 
-def _black_sigma_seed(train: pd.DataFrame, fft_params_by_expiry: dict) -> float:
-    """Replicate snapshot_job's first-success SVCJ seed without fitting Heston.
+def _black_sigma_seed(
+    train: pd.DataFrame,
+    fft_params_by_expiry: dict,
+    *,
+    previous_black: dict[str, float] | None,
+    lam: float,
+):
+    """Replicate the full pipeline's Black path until SVCJ first succeeds.
 
-    In the full pipeline the current snapshot's calibrated Black sigma is used
-    only while no successful prior SVCJ parameter vector exists. Once SVCJ has
-    succeeded, all ten SVCJ coordinates come from the chronological warm start,
-    so repeated Black/Heston fits are irrelevant to lambda_TS selection.
+    Heston never feeds SVCJ initialization. Black does, but only when there is
+    no successful previous SVCJ vector. The Black fit itself is warm-started and
+    receives the same temporal-regularization strength in the full pipeline, so
+    we preserve that behavior exactly here.
     """
     result = calibrate_model(
         train,
@@ -193,16 +200,23 @@ def _black_sigma_seed(train: pd.DataFrame, fft_params_by_expiry: dict) -> float:
         dynamic_b=False,
         fft_params_by_expiry=fft_params_by_expiry,
         use_cache_in_optimization=False,
-        initial_params=None,
-        previous_params=None,
-        l2_prev_strength=0.0,
+        initial_params=previous_black,
+        previous_params=previous_black,
+        l2_prev_strength=float(lam),
         max_nfev=MAX_NFEV,
         verbose=0,
         clear_cache_before=False,
     )
+    sigma = 0.6
+    next_black = previous_black
     if result.success and np.isfinite(result.params.get("sigma", np.nan)):
-        return float(result.params["sigma"])
-    return 0.6
+        sigma = float(result.params["sigma"])
+        next_black = dict(result.params)
+    elif previous_black and np.isfinite(previous_black.get("sigma", np.nan)):
+        # This branch only supplies a seed if the current Black optimizer fails;
+        # it matches snapshot_job's retained warm-start state.
+        sigma = float(previous_black["sigma"])
+    return sigma, next_black
 
 
 def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -> None:
@@ -212,6 +226,7 @@ def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -
 
     files = _frozen_snapshot_files(project_root)
     currency_index = CURRENCY_INDEX[currency]
+    warm_black: dict[str, float] | None = None
     warm_svcj: dict[str, float] | None = None
     rows: list[dict] = []
 
@@ -238,7 +253,12 @@ def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -
             continue
 
         if warm_svcj is None:
-            sigma_seed = _black_sigma_seed(train, fft_params_by_expiry)
+            sigma_seed, warm_black = _black_sigma_seed(
+                train,
+                fft_params_by_expiry,
+                previous_black=warm_black,
+                lam=lam,
+            )
             initial_params = _svcj_seed_from_black_sigma(sigma_seed)
         else:
             initial_params = dict(warm_svcj)
@@ -272,11 +292,15 @@ def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -
             )
             continue
 
+        # Keep the calibration-success flag and warm-state semantics identical
+        # to process_snapshot_to_payload. Validation repricing is an evaluation
+        # step; a pricing NaN must not retroactively turn a successful optimizer
+        # result into a failed calibration or alter the next warm start.
+        calibration_success = bool(result.success)
+        message = str(result.message)
         rmse_validation = np.nan
         mae_validation = np.nan
-        success = bool(result.success)
-        message = str(result.message)
-        if success:
+        if calibration_success:
             try:
                 validation_prices = price_dataframe(
                     validation,
@@ -293,17 +317,13 @@ def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -
                 )
                 rmse_validation = float(validation_errors["rmse"])
                 mae_validation = float(validation_errors["mae"])
-                if not np.isfinite(rmse_validation):
-                    success = False
-                    message += " (non-finite validation prices)"
             except Exception as exc:
-                success = False
                 message += f" (validation pricing exception: {exc!r})"
 
         row = {
             "timestamp": ts_iso,
             "currency": currency,
-            "success": bool(success),
+            "success": calibration_success,
             "message": message,
             "nfev": int(result.nfev),
             "rmse_validation": rmse_validation,
@@ -318,9 +338,7 @@ def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -
         row.update({name: getattr(result, name) for name in DIAGNOSTIC_NAMES})
         rows.append(row)
 
-        # Match the full pipeline: only successful calibrations advance the
-        # chronological warm-start / regularization anchor.
-        if success:
+        if calibration_success:
             warm_svcj = dict(result.params)
 
         if (file_index + 1) % 25 == 0 or file_index + 1 == len(files):
