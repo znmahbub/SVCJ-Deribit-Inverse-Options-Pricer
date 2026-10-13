@@ -21,6 +21,7 @@ jobs:
       RUN_HIGH: '38395028358'
       GH_TOKEN: ${{ github.token }}
     steps:
+      # Selection cannot start until all eleven candidate calibrations are green.
       - name: Wait for complete regularization sweep
         shell: bash
         run: |
