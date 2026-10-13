@@ -277,3 +277,17 @@ The test suite is part of the documented structure because it now enforces behav
 - **Notebook support code** — `notebooks/_lib/*.py` and `notebooks/sync_regularization_notebooks.py`.
 - **Documentation/report orchestration** — the notebooks themselves plus generated chapter output folders.
 - **Tests/fixtures** — everything under `tests/` and `tests/fixtures/`.
+
+
+## Remediation invariants (Tasks 3-5)
+
+### Pricing measure and inverse-option Greeks
+
+`src/inverse_fft_pricer.py` defines `cf_black`, `cf_heston`, and `cf_svcj`
+under the pricing measure `Q` for which the dated futures price is a martingale
+under the maintained deterministic/zero-discounting setup. `src/greeks.py`
+performs the separate futures-price-numeraire change used for regular delta:
+the shifted characteristic function is `phi_Q(u-i) / phi_Q(-i)` and therefore
+`P1 = Q^F(F_T > K)`. Under Black, direct `Q` exercise probability is `N(d2)`,
+while `P1` and call regular delta are `N(d1)`. Net inverse delta is centralized
+as `Delta_net = Delta_regular - V_coin`.

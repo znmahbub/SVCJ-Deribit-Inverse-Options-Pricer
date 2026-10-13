@@ -15,13 +15,13 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 from src.calibration import _build_pricing_plan, _price_with_plan
-from src.inverse_fft_pricer import (
-    FFTParams,
-    _leggauss_cached,          # shared cached GL nodes — no need to redefine
-    _norm_cdf,                  # shared rational-approximation CDF
-    cf_heston,
-    cf_svcj,
+from src.greeks import (
+    black_regular_delta,
+    call_p1_from_logprice_cf,
+    net_delta as inverse_net_delta,
+    regular_delta_from_call_p1,
 )
+from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj
 from src.results_store import (
     PARAM_SHEET_BLACK,
     PARAM_SHEET_HESTON,
@@ -348,16 +348,6 @@ def load_funding_history(data_dir: Path, filename: str | None = None) -> tuple[p
     return df.sort_values(["currency", "timestamp"]).reset_index(drop=True), chosen
 
 
-def _black_call_delta(F: np.ndarray, K: np.ndarray, T: np.ndarray, sigma: np.ndarray) -> np.ndarray:
-    out = np.full_like(F, np.nan, dtype=float)
-    valid = np.isfinite(F) & np.isfinite(K) & np.isfinite(T) & np.isfinite(sigma) & (F > 0) & (K > 0) & (T > 0) & (sigma > 0)
-    if not np.any(valid):
-        return out
-    srt = sigma[valid] * np.sqrt(T[valid])
-    d1 = (np.log(F[valid] / K[valid]) + 0.5 * sigma[valid] ** 2 * T[valid]) / srt
-    out[valid] = _norm_cdf(d1)
-    return out
-
 
 def _intrinsic_coin_price(option_type: np.ndarray, F: np.ndarray, K: np.ndarray) -> np.ndarray:
     is_call = np.char.lower(option_type.astype(str)) == "call"
@@ -392,25 +382,6 @@ def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, A
     return out
 
 
-def _semi_analytic_call_p1_from_logprice_cf(K: np.ndarray, cf, quad_u_max: float = 200.0, quad_n: int = 128) -> np.ndarray:
-    K = np.asarray(K, dtype=float)
-    out = np.full_like(K, np.nan)
-    valid = np.isfinite(K) & (K > 0)
-    if not np.any(valid):
-        return out
-    K_valid = K[valid]
-    lnK = np.log(K_valid)
-    nodes, weights = _leggauss_cached(int(quad_n))
-    u = 0.5 * quad_u_max * (nodes + 1.0)
-    w = 0.5 * quad_u_max * weights
-    phi_u_minus_i = np.asarray(cf(u - 1j), dtype=np.complex128).reshape(-1)
-    phi_minus_i = np.asarray(cf(np.array([-1j])), dtype=np.complex128).reshape(-1)[0]
-    exp_term = np.exp(-1j * u[:, None] * lnK[None, :])
-    integrand = exp_term * (phi_u_minus_i[:, None] / ((1j * u)[:, None] * phi_minus_i))
-    p1 = 0.5 + (1.0 / np.pi) * np.sum(w[:, None] * np.real(integrand), axis=0)
-    out[valid] = np.clip(p1, 0.0, 1.0)
-    return out
-
 
 def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> np.ndarray:
     if block.empty:
@@ -433,10 +404,11 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
     for idx, K_g, put_mask, T_g, F0_g, _ in pricing_plan:
         K_g = np.asarray(K_g, dtype=float)
         if model == "black":
-            p1 = _black_call_delta(
+            p1 = black_regular_delta(
                 np.full_like(K_g, float(F0_g)), K_g,
                 np.full_like(K_g, float(T_g)),
                 np.full_like(K_g, float(params["sigma"])),
+                option_type="call",
             )
         elif model == "heston":
             # Use partial to bind loop variables by value — avoids late-binding closure bugs.
@@ -447,7 +419,7 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
                 sigma_v=float(params["sigma_v"]), rho=float(params["rho"]),
                 v0=float(params["v0"]),
             )
-            p1 = _semi_analytic_call_p1_from_logprice_cf(K_g, cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
+            p1 = call_p1_from_logprice_cf(K_g, float(F0_g), cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
         elif model == "svcj":
             cf = partial(
                 cf_svcj,
@@ -458,11 +430,12 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
                 ell_y=float(params["ell_y"]), sigma_y=float(params["sigma_y"]),
                 ell_v=float(params["ell_v"]), rho_j=float(params["rho_j"]),
             )
-            p1 = _semi_analytic_call_p1_from_logprice_cf(K_g, cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
+            p1 = call_p1_from_logprice_cf(K_g, float(F0_g), cf=cf, quad_u_max=delta_u_max, quad_n=delta_quad_n)
         else:
             raise ValueError(f"Unsupported model: {model}")
-        reg = p1.copy()
-        reg[put_mask] = reg[put_mask] - 1.0
+        reg = regular_delta_from_call_p1(
+            p1, np.where(put_mask, "put", "call")
+        )
         out[live_positions[idx]] = reg
     return out
 
@@ -470,7 +443,7 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
 def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True)
     reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)
-    return prices, reg_delta, reg_delta - prices
+    return prices, reg_delta, inverse_net_delta(reg_delta, prices)
 
 
 def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:
