@@ -51,7 +51,12 @@ def load_futures_data(paths: NotebookPaths) -> FuturesData:
     if "currency" not in term.columns and "coin" in term.columns:
         term["currency"] = term["coin"]
 
-    perp_price_col = "perp_futures_mark_price" if "perp_futures_mark_price" in perp.columns else "candle_price_used"
+    if "perp_futures_price_proxy" in perp.columns:
+        perp_price_col = "perp_futures_price_proxy"
+    elif "perp_futures_mark_price" in perp.columns:
+        perp_price_col = "perp_futures_mark_price"  # legacy compatibility
+    else:
+        perp_price_col = "candle_price_used"
     term_price_col = "term_mark_price_final" if "term_mark_price_final" in term.columns else "term_candle_price_used"
     perp[perp_price_col] = pd.to_numeric(perp[perp_price_col], errors="coerce")
     term[term_price_col] = pd.to_numeric(term[term_price_col], errors="coerce")

@@ -650,6 +650,32 @@ def build_term_incremental(
     return updated_term, term_new
 
 
+
+def _perp_price_kind(resolution: str) -> str:
+    res = str(resolution).strip()
+    return "nearest_1m_candle_open_close" if res == "1" else f"nearest_{res}_candle_open_close"
+
+
+def _migrate_legacy_perp_schema(existing: pd.DataFrame) -> pd.DataFrame:
+    """Normalize historical files without pretending a candle proxy was a mark."""
+    out = existing.copy()
+    if out.empty:
+        return out
+    if "timestamp" in out.columns and "obs_datetime" not in out.columns:
+        out["obs_datetime"] = out["timestamp"]
+    if "currency" in out.columns and "coin" not in out.columns:
+        out["coin"] = out["currency"]
+    if "perp_futures_price_proxy" not in out.columns and "perp_futures_mark_price" in out.columns:
+        out["perp_futures_price_proxy"] = pd.to_numeric(out["perp_futures_mark_price"], errors="coerce")
+        out["price_kind"] = "legacy_mark_named_candle_proxy"
+        if "price_source" not in out.columns:
+            if "data_source" in out.columns:
+                out["price_source"] = out["data_source"]
+            else:
+                out["price_source"] = "legacy_unknown"
+    return out
+
+
 def build_perp_incremental(
     combos: pd.DataFrame,
     existing_perp: pd.DataFrame,
@@ -660,7 +686,7 @@ def build_perp_incremental(
     perp_max_bars_per_call: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if combos.empty:
-        return existing_perp.copy(), pd.DataFrame()
+        return _migrate_legacy_perp_schema(existing_perp), pd.DataFrame()
 
     perp_requests = combos.copy()
     perp_requests["obs_datetime"] = perp_requests["timestamp"]
@@ -668,34 +694,27 @@ def build_perp_incremental(
     perp_requests["instrument_name"] = perp_requests["coin"].astype(str) + "-PERPETUAL"
     key_cols = ["obs_datetime", "coin"]
 
-    existing_norm = existing_perp.copy()
-    if not existing_norm.empty:
-        if "timestamp" in existing_norm.columns and "obs_datetime" not in existing_norm.columns:
-            existing_norm["obs_datetime"] = existing_norm["timestamp"]
-        if "currency" in existing_norm.columns and "coin" not in existing_norm.columns:
-            existing_norm["coin"] = existing_norm["currency"]
-
+    existing_norm = _migrate_legacy_perp_schema(existing_perp)
     needs_refresh = perp_requests.copy()
     if not existing_norm.empty and all(c in existing_norm.columns for c in key_cols):
         existing_subset = select_rows_by_keys(existing_norm, perp_requests, key_cols)
         if not existing_subset.empty:
             merged = perp_requests.merge(existing_subset, on=key_cols, how="left", suffixes=("", "__existing"))
-            existing_price = pd.to_numeric(merged.get("perp_futures_mark_price"), errors="coerce")
-            existing_source = merged.get("data_source")
+            existing_price = pd.to_numeric(merged.get("perp_futures_price_proxy"), errors="coerce")
             existing_ok = existing_price.notna()
-            if existing_source is not None:
-                existing_ok &= existing_source.astype(str).eq("tradingview_chart_open_close_nearest")
             needs_refresh = merged.loc[~existing_ok, perp_requests.columns].copy()
 
     if needs_refresh.empty:
-        return existing_perp.copy(), pd.DataFrame()
+        return existing_norm.copy(), pd.DataFrame()
 
+    price_kind = _perp_price_kind(perp_resolution)
     if skip_perp_backfill:
         perp_new = needs_refresh.copy()
-        perp_new["perp_futures_mark_price"] = pd.NA
+        perp_new["perp_futures_price_proxy"] = pd.NA
         perp_new["perp_futures_best_bid"] = pd.NA
         perp_new["perp_futures_best_ask"] = pd.NA
-        perp_new["data_source"] = "skipped"
+        perp_new["price_source"] = "skipped"
+        perp_new["price_kind"] = price_kind
         for col in [
             "candle_found",
             "candle_tick_ms",
@@ -728,21 +747,22 @@ def build_perp_incremental(
             max_bars_per_call=perp_max_bars_per_call,
             progress_desc="Fetching perp candles",
         )
-        perp_new["perp_futures_mark_price"] = np.where(
+        perp_new["perp_futures_price_proxy"] = np.where(
             perp_new["accepted_under_max_gap"].fillna(False),
             pd.to_numeric(perp_new["candle_price_used"], errors="coerce"),
             np.nan,
         )
         perp_new["perp_futures_best_bid"] = pd.NA
         perp_new["perp_futures_best_ask"] = pd.NA
-        perp_new["data_source"] = "tradingview_chart_open_close_nearest"
+        perp_new["price_source"] = "deribit_tradingview_chart"
+        perp_new["price_kind"] = price_kind
 
     if "timestamp" in perp_new.columns:
         perp_new = perp_new.drop(columns=["timestamp"], errors="ignore")
     if "currency" in perp_new.columns:
         perp_new = perp_new.drop(columns=["currency"], errors="ignore")
 
-    existing_keep = exclude_rows_by_keys(existing_perp, needs_refresh, key_cols)
+    existing_keep = exclude_rows_by_keys(existing_norm, needs_refresh, key_cols)
     updated_perp = concat_dedup_sort(
         existing_df=existing_keep,
         new_df=perp_new,
@@ -750,7 +770,6 @@ def build_perp_incremental(
         sort_cols=["obs_datetime", "coin"],
     )
     return updated_perp, perp_new
-
 
 # -----------------------------
 # Main

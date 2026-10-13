@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 import math
 import re
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -314,6 +315,7 @@ def _load_snapshot_minimal(snapshot_path: str) -> pd.DataFrame:
     return out
 
 
+
 def load_perp_history(data_dir: Path, filename: str | None = None) -> tuple[pd.DataFrame, str]:
     path, used = _resolve_data_file(
         data_dir,
@@ -321,39 +323,76 @@ def load_perp_history(data_dir: Path, filename: str | None = None) -> tuple[pd.D
         ("perpetual_futures_prices_history.csv", "perpetual_futures_prices.csv"),
     )
     df = pd.read_csv(path)
+    base_required = {"obs_datetime", "coin"}
+    if not base_required.issubset(df.columns):
+        raise ValueError(f"{path} must contain obs_datetime and coin.")
 
-    # New updater format:
-    #   obs_datetime, coin, perp_futures_mark_price, perp_futures_best_bid, perp_futures_best_ask, ...
-    if {"obs_datetime", "coin", "perp_futures_mark_price"}.issubset(df.columns):
-        out = df.copy()
-        out["currency"] = out["coin"].astype(str).str.upper()
-        out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce")
+    out = df.copy()
+    out["currency"] = out["coin"].astype(str).str.upper()
+    out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce")
+
+    if "perp_futures_price_proxy" in out.columns:
+        out["close_price"] = pd.to_numeric(out["perp_futures_price_proxy"], errors="coerce")
+        if "price_source" not in out.columns:
+            out["price_source"] = "unknown_proxy_source"
+        if "price_kind" not in out.columns:
+            out["price_kind"] = "unspecified_price_proxy"
+        out["legacy_price_schema"] = False
+    elif "perp_futures_mark_price" in out.columns:
+        warnings.warn(
+            f"{path.name} uses the legacy perp_futures_mark_price name for a candle-derived proxy; "
+            "load is supported for backward compatibility only.",
+            UserWarning,
+            stacklevel=2,
+        )
         out["close_price"] = pd.to_numeric(out["perp_futures_mark_price"], errors="coerce")
+        if "data_source" in out.columns:
+            out["price_source"] = out["data_source"].astype(str)
+        else:
+            out["price_source"] = "legacy_unknown"
+        out["price_kind"] = "legacy_mark_named_candle_proxy"
+        out["legacy_price_schema"] = True
+    else:
+        raise ValueError(
+            f"{path} must contain perp_futures_price_proxy (preferred) or the legacy perp_futures_mark_price column."
+        )
 
-        # Fallback only if mark price is missing.
-        if "perp_futures_best_bid" in out.columns and "perp_futures_best_ask" in out.columns:
-            bid = pd.to_numeric(out["perp_futures_best_bid"], errors="coerce")
-            ask = pd.to_numeric(out["perp_futures_best_ask"], errors="coerce")
-            valid_mid = np.isfinite(bid) & np.isfinite(ask) & (ask >= bid)
-            missing_close = ~np.isfinite(out["close_price"])
-            out.loc[missing_close & valid_mid, "close_price"] = 0.5 * (bid[missing_close & valid_mid] + ask[missing_close & valid_mid])
+    # Fallback only when the canonical/legacy proxy itself is missing.
+    if "perp_futures_best_bid" in out.columns and "perp_futures_best_ask" in out.columns:
+        bid = pd.to_numeric(out["perp_futures_best_bid"], errors="coerce")
+        ask = pd.to_numeric(out["perp_futures_best_ask"], errors="coerce")
+        valid_mid = np.isfinite(bid) & np.isfinite(ask) & (ask >= bid)
+        missing_close = ~np.isfinite(out["close_price"])
+        out.loc[missing_close & valid_mid, "close_price"] = 0.5 * (bid[missing_close & valid_mid] + ask[missing_close & valid_mid])
+        out.loc[missing_close & valid_mid, "price_kind"] = "best_bid_ask_mid_fallback"
+    if "trade_price" in out.columns:
+        trade_price = pd.to_numeric(out["trade_price"], errors="coerce")
+        missing_close = ~np.isfinite(out["close_price"])
+        out.loc[missing_close, "close_price"] = trade_price[missing_close]
+        out.loc[missing_close & np.isfinite(trade_price), "price_kind"] = "trade_price_fallback"
 
-        if "trade_price" in out.columns:
-            trade_price = pd.to_numeric(out["trade_price"], errors="coerce")
-            missing_close = ~np.isfinite(out["close_price"])
-            out.loc[missing_close, "close_price"] = trade_price[missing_close]
+    out["proxy_gap_seconds"] = pd.to_numeric(out.get("candle_price_gap_seconds", np.nan), errors="coerce")
+    out["proxy_price_choice"] = out.get("candle_price_choice", pd.Series(pd.NA, index=out.index))
+    out["proxy_resolution"] = out.get("candle_resolution", pd.Series(pd.NA, index=out.index))
 
-        out = out.dropna(subset=["currency", "timestamp", "close_price"]).copy()
-        out = out.sort_values(["currency", "timestamp"]).drop_duplicates(subset=["currency", "timestamp"], keep="first").reset_index(drop=True)
-        if out.empty:
-            raise ValueError(f"{path} contains the new perpetual futures format, but no usable rows after parsing.")
-        return out[["currency", "timestamp", "close_price"]], used
-
-    raise ValueError(
-        f"{path} must contain the new perpetual futures columns "
-        "(obs_datetime, coin, perp_futures_mark_price)."
-    )
-
+    out = out.dropna(subset=["currency", "timestamp", "close_price"]).copy()
+    out = out.sort_values(["currency", "timestamp"]).drop_duplicates(
+        subset=["currency", "timestamp"], keep="first"
+    ).reset_index(drop=True)
+    if out.empty:
+        raise ValueError(f"{path} contains no usable perpetual-futures proxy rows after parsing.")
+    keep = [
+        "currency",
+        "timestamp",
+        "close_price",
+        "price_source",
+        "price_kind",
+        "proxy_gap_seconds",
+        "proxy_price_choice",
+        "proxy_resolution",
+        "legacy_price_schema",
+    ]
+    return out[keep], used
 
 def load_funding_history(data_dir: Path, filename: str | None = None) -> tuple[pd.DataFrame, str | None]:
     candidates = ("perpetual_funding_history.csv", "perpetual_funding.csv")
@@ -815,6 +854,9 @@ def make_notes(cfg: HedgingConfig, panel: pd.DataFrame, perp: pd.DataFrame, fund
         ("data_dir", str(cfg.data_dir)),
         ("output_xlsx", str(cfg.output_xlsx)),
         ("hedge_price_file", used_perp_file),
+        ("hedge_price_source", ",".join(sorted(perp["price_source"].dropna().astype(str).unique())) if "price_source" in perp.columns else None),
+        ("hedge_price_kind", ",".join(sorted(perp["price_kind"].dropna().astype(str).unique())) if "price_kind" in perp.columns else None),
+        ("hedge_price_legacy_schema", bool(perp["legacy_price_schema"].fillna(False).astype(bool).any()) if "legacy_price_schema" in perp.columns else None),
         ("funding_file", used_funding_file),
         ("dynamic_b", cfg.dynamic_b),
         ("verify_prices", cfg.verify_prices),

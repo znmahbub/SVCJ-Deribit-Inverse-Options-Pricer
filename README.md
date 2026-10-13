@@ -175,3 +175,7 @@ Generated hedging artifacts are written to `hedging_output/hedging_chapter4/`.
 - `docs/reproducibility/thesis_sample_manifest.csv` — compact manifest pinning the submitted-thesis sample index.
 - `docs/Pricing and Hedging Deribit Inverse Options under Affine Stochastic Volatility Models with Jumps.pdf` — submitted thesis PDF used as the pre-remediation manuscript baseline.
 - `docs/superpowers/` — the remediation design and implementation plan.
+
+## Perpetual hedge price provenance
+
+The historical hedge input in `data/perpetual_futures_prices.csv` is a **price proxy**, not an exchange-provided historical Deribit mark series. New backfills use the neutral field `perp_futures_price_proxy`: the closer in timestamp of the open or close of the matched Deribit TradingView candle (one-minute resolution in the thesis baseline), subject to the configured maximum-gap filter. `price_source`, `price_kind`, `candle_price_choice`, `candle_price_gap_seconds`, and `candle_resolution` preserve the provenance/alignment diagnostics. `src.hedging_analysis.load_perp_history` still reads the old `perp_futures_mark_price` field for legacy workbooks, but explicitly labels and warns about that schema.
