@@ -58,8 +58,20 @@ FFT_BASE = FFTParams(N=2 ** 12, eta=0.10, alpha=1.5, b=-10.0, use_simpson=True)
 MAX_NFEV = dict(black=250, heston=250, svcj=250)
 
 
-def run_candidate(project_root: Path, lam: float, output: Path) -> None:
+def _frozen_snapshot_files(project_root: Path) -> list[Path]:
+    """Return exact thesis-sample membership from the pinned combo manifest.
+
+    The inclusive timestamp bounds alone currently contain one additional CSV.
+    Task 1 defined the authoritative membership as the unique ``snapshot_file``
+    set in ``data/snapshot_currency_combos.csv`` inside the frozen bounds, so
+    the selection sweep follows that definition rather than treating every
+    file that happens to lie between the endpoint timestamps as in-sample.
+    """
     data_dir = project_root / "data"
+    combos_path = data_dir / "snapshot_currency_combos.csv"
+    combos = pd.read_csv(combos_path, usecols=["snapshot_file"])
+    membership = set(combos["snapshot_file"].dropna().astype(str))
+
     files = sorted(list_snapshot_files(data_dir), key=timestamp_from_filename)
     files = filter_paths_by_timestamp(
         files,
@@ -67,10 +79,20 @@ def run_candidate(project_root: Path, lam: float, output: Path) -> None:
         start=ANALYSIS_START,
         end=ANALYSIS_END,
     )
+    files = [path for path in files if path.name in membership]
+
     if len(files) != EXPECTED_SNAPSHOTS:
         raise RuntimeError(
-            f"Frozen sample expected {EXPECTED_SNAPSHOTS} snapshots, found {len(files)}"
+            "Frozen manifest expected "
+            f"{EXPECTED_SNAPSHOTS} snapshots, found {len(files)} after exact membership filtering"
         )
+    if len({path.name for path in files}) != EXPECTED_SNAPSHOTS:
+        raise RuntimeError("Frozen snapshot membership contains duplicate filenames")
+    return files
+
+
+def run_candidate(project_root: Path, lam: float, output: Path) -> None:
+    files = _frozen_snapshot_files(project_root)
 
     rows: dict[str, list[pd.DataFrame]] = {"black": [], "heston": [], "svcj": []}
 
