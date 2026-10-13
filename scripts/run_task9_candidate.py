@@ -5,8 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-# Keep numerical libraries single-threaded: candidate-level parallelism is
-# provided by the CI matrix, while each temporal path is deliberately sequential.
+# Candidate/currency jobs are parallelized by the CI matrix; each temporal path
+# itself must remain strictly chronological.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -16,20 +16,22 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import numpy as np
 import pandas as pd
 
 from src.analysis_window import filter_paths_by_timestamp
 from src.batch_runner import list_snapshot_files
-from src.calibration import WeightConfig
-from src.inverse_fft_pricer import FFTParams
-from src.snapshot_job import process_snapshot_to_payload, timestamp_from_filename
+from src.calibration import WeightConfig, calibrate_model, filter_liquid_options, price_dataframe
+from src.inverse_fft_pricer import FFTParams, center_fft_params_on_strikes
+from src.snapshot_job import compute_errors, timestamp_from_filename, timestamp_to_iso_z
+from src.splitting import SplitConfig, assign_cross_sectional_split
 
 
 ANALYSIS_START = pd.Timestamp("2025-12-30T17:31:15Z")
 ANALYSIS_END = pd.Timestamp("2026-04-08T05:03:27Z")
 EXPECTED_SNAPSHOTS = 388
 GLOBAL_SEED = 123
-CURRENCIES = ("BTC", "ETH")
+CURRENCY_INDEX = {"BTC": 0, "ETH": 1}
 
 FILTER_RULES = dict(
     require_bid_ask=True,
@@ -55,22 +57,31 @@ WEIGHTS = WeightConfig(
 )
 
 FFT_BASE = FFTParams(N=2 ** 12, eta=0.10, alpha=1.5, b=-10.0, use_simpson=True)
-MAX_NFEV = dict(black=250, heston=250, svcj=250)
+MAX_NFEV = 250
+MIN_OPTIONS_AFTER_FILTER = 50
+
+SVCJ_PARAM_NAMES = (
+    "kappa", "theta", "sigma_v", "rho", "v0",
+    "lam", "ell_y", "sigma_y", "ell_v", "rho_j",
+)
+DIAGNOSTIC_NAMES = (
+    "regularization_active",
+    "l2_prev_strength",
+    "feller_penalty_active",
+    "feller_gap",
+    "feller_violated",
+    "svcj_moment_penalty_active",
+    "svcj_martingale_margin",
+    "svcj_martingale_violated",
+    "svcj_contour_margin",
+    "svcj_contour_violated",
+)
 
 
 def _frozen_snapshot_files(project_root: Path) -> list[Path]:
-    """Return the exact 388-snapshot submitted-thesis sample.
-
-    Task 9 reconciled the Task-1 endpoint against the submitted baseline
-    `calibration_results_reg_100.xlsx`: its parameter sheets contain 388
-    timestamps per currency and end at 2026-04-08T05:03:27Z. The repository
-    contains a later same-day snapshot at 10:01:19Z that was not part of those
-    submitted calibrations. We apply the corrected endpoint and also require
-    membership in the repository snapshot index as a consistency check.
-    """
+    """Return the exact 388-snapshot submitted-thesis sample."""
     data_dir = project_root / "data"
-    combos_path = data_dir / "snapshot_currency_combos.csv"
-    combos = pd.read_csv(combos_path, usecols=["snapshot_file"])
+    combos = pd.read_csv(data_dir / "snapshot_currency_combos.csv", usecols=["snapshot_file"])
     membership = set(combos["snapshot_file"].dropna().astype(str))
 
     files = sorted(list_snapshot_files(data_dir), key=timestamp_from_filename)
@@ -84,68 +95,259 @@ def _frozen_snapshot_files(project_root: Path) -> list[Path]:
 
     if len(files) != EXPECTED_SNAPSHOTS:
         raise RuntimeError(
-            "Frozen submitted-thesis sample expected "
-            f"{EXPECTED_SNAPSHOTS} snapshots, found {len(files)}"
+            f"Frozen submitted-thesis sample expected {EXPECTED_SNAPSHOTS} snapshots, found {len(files)}"
         )
-    if len({path.name for path in files}) != EXPECTED_SNAPSHOTS:
-        raise RuntimeError("Frozen snapshot membership contains duplicate filenames")
     return files
 
 
-def run_candidate(project_root: Path, lam: float, output: Path) -> None:
+def _svcj_seed_from_black_sigma(sigma: float) -> dict[str, float]:
+    sigma = float(sigma)
+    sigma2 = sigma * sigma
+    return {
+        "kappa": 2.0,
+        "theta": 0.5 * sigma2,
+        "sigma_v": 0.75 * sigma,
+        "rho": -0.5,
+        "v0": 0.5 * sigma2,
+        "lam": 0.10,
+        "ell_y": -0.05,
+        "sigma_y": 0.15,
+        "ell_v": 0.10,
+        "rho_j": -0.3,
+    }
+
+
+def _failure_row(*, ts_iso: str, currency: str, seed: int, lam: float, message: str, n_total: int) -> dict:
+    row = {
+        "timestamp": ts_iso,
+        "currency": currency,
+        "success": False,
+        "message": message,
+        "nfev": 0,
+        "rmse_validation": np.nan,
+        "mae_validation": np.nan,
+        "n_options_total": int(n_total),
+        "n_train": 0,
+        "n_validation": 0,
+        "n_test": 0,
+        "random_seed": int(seed),
+        "regularization_active": False,
+        "l2_prev_strength": float(lam),
+        "feller_penalty_active": False,
+        "feller_gap": np.nan,
+        "feller_violated": False,
+        "svcj_moment_penalty_active": False,
+        "svcj_martingale_margin": np.nan,
+        "svcj_martingale_violated": False,
+        "svcj_contour_margin": np.nan,
+        "svcj_contour_violated": False,
+    }
+    row.update({name: np.nan for name in SVCJ_PARAM_NAMES})
+    return row
+
+
+def _prepare_snapshot(path: Path, *, currency: str, seed: int):
+    raw = pd.read_csv(path)
+    if "currency" not in raw.columns:
+        raise ValueError("Missing required column: currency")
+    ccy = raw[raw["currency"].astype(str).str.strip().str.upper() == currency].copy()
+    filt = filter_liquid_options(ccy, currency=currency, **FILTER_RULES)
+    if len(filt) < MIN_OPTIONS_AFTER_FILTER:
+        raise ValueError(
+            f"too few options after filtering: n={len(filt)} < {MIN_OPTIONS_AFTER_FILTER}"
+        )
+
+    filt = filt.reset_index(drop=True).copy()
+    split_cfg = SplitConfig(
+        train_frac=0.60,
+        validation_frac=0.20,
+        test_frac=0.20,
+        random_seed=int(seed),
+    )
+    filt["split"] = assign_cross_sectional_split(filt, split_cfg).to_numpy()
+    train = filt.loc[filt["split"] == "train"].copy()
+    validation = filt.loc[filt["split"] == "validation"].copy()
+    test = filt.loc[filt["split"] == "test"].copy()
+
+    fft_params_by_expiry = {}
+    for exp, group in filt.groupby("expiry_datetime", sort=False):
+        fft_params_by_expiry[exp] = center_fft_params_on_strikes(
+            FFT_BASE, group["strike"].to_numpy(dtype=float)
+        )
+    return filt, train, validation, test, fft_params_by_expiry
+
+
+def _black_sigma_seed(train: pd.DataFrame, fft_params_by_expiry: dict) -> float:
+    """Replicate snapshot_job's first-success SVCJ seed without fitting Heston.
+
+    In the full pipeline the current snapshot's calibrated Black sigma is used
+    only while no successful prior SVCJ parameter vector exists. Once SVCJ has
+    succeeded, all ten SVCJ coordinates come from the chronological warm start,
+    so repeated Black/Heston fits are irrelevant to lambda_TS selection.
+    """
+    result = calibrate_model(
+        train,
+        "black",
+        weight_config=WEIGHTS,
+        fft_params_base=FFT_BASE,
+        dynamic_b=False,
+        fft_params_by_expiry=fft_params_by_expiry,
+        use_cache_in_optimization=False,
+        initial_params=None,
+        previous_params=None,
+        l2_prev_strength=0.0,
+        max_nfev=MAX_NFEV,
+        verbose=0,
+        clear_cache_before=False,
+    )
+    if result.success and np.isfinite(result.params.get("sigma", np.nan)):
+        return float(result.params["sigma"])
+    return 0.6
+
+
+def run_candidate(project_root: Path, lam: float, currency: str, output: Path) -> None:
+    currency = str(currency).upper()
+    if currency not in CURRENCY_INDEX:
+        raise ValueError(f"currency must be one of {sorted(CURRENCY_INDEX)}")
+
     files = _frozen_snapshot_files(project_root)
+    currency_index = CURRENCY_INDEX[currency]
+    warm_svcj: dict[str, float] | None = None
+    rows: list[dict] = []
 
-    rows: dict[str, list[pd.DataFrame]] = {"black": [], "heston": [], "svcj": []}
+    for file_index, path in enumerate(files):
+        ts = timestamp_from_filename(path)
+        ts_iso = timestamp_to_iso_z(ts)
+        seed = GLOBAL_SEED + 10_000 * currency_index + file_index
 
-    for currency_index, currency in enumerate(CURRENCIES):
-        warm: dict[str, dict[str, float]] = {}
-        for file_index, path in enumerate(files):
-            seed = GLOBAL_SEED + 10_000 * currency_index + file_index
-            payload = process_snapshot_to_payload(
-                path,
-                currency=currency,
-                filter_rules=FILTER_RULES,
-                weight_config=WEIGHTS,
-                fft_base=FFT_BASE,
-                max_nfev=MAX_NFEV,
-                train_frac=0.60,
-                validation_frac=0.20,
-                test_frac=0.20,
-                random_seed=seed,
-                runtime_top_expiries_by_oi=None,
-                runtime_max_options=None,
-                min_options_after_filter=50,
-                warm_start=warm,
-                l2_prev_strength=float(lam),
-                verbose=False,
+        try:
+            filt, train, validation, test, fft_params_by_expiry = _prepare_snapshot(
+                path, currency=currency, seed=seed
             )
-            for model in rows:
-                frame = payload.get("param_rows", {}).get(model)
-                if frame is not None and not frame.empty:
-                    rows[model].append(frame.copy())
-            warm = payload.get("warm_next") or warm
-
-            if (file_index + 1) % 50 == 0 or file_index + 1 == len(files):
-                print(
-                    f"lambda={lam:g} {currency}: {file_index + 1}/{len(files)} snapshots",
-                    flush=True,
+        except Exception as exc:
+            rows.append(
+                _failure_row(
+                    ts_iso=ts_iso,
+                    currency=currency,
+                    seed=seed,
+                    lam=lam,
+                    message=f"Preparation exception: {exc!r}",
+                    n_total=0,
                 )
+            )
+            continue
+
+        if warm_svcj is None:
+            sigma_seed = _black_sigma_seed(train, fft_params_by_expiry)
+            initial_params = _svcj_seed_from_black_sigma(sigma_seed)
+        else:
+            initial_params = dict(warm_svcj)
+
+        try:
+            result = calibrate_model(
+                train,
+                "svcj",
+                weight_config=WEIGHTS,
+                fft_params_base=FFT_BASE,
+                dynamic_b=False,
+                fft_params_by_expiry=fft_params_by_expiry,
+                use_cache_in_optimization=False,
+                initial_params=initial_params,
+                previous_params=warm_svcj,
+                l2_prev_strength=float(lam),
+                max_nfev=MAX_NFEV,
+                verbose=0,
+                clear_cache_before=False,
+            )
+        except Exception as exc:
+            rows.append(
+                _failure_row(
+                    ts_iso=ts_iso,
+                    currency=currency,
+                    seed=seed,
+                    lam=lam,
+                    message=f"Calibration exception: {exc!r}",
+                    n_total=len(filt),
+                )
+            )
+            continue
+
+        rmse_validation = np.nan
+        mae_validation = np.nan
+        success = bool(result.success)
+        message = str(result.message)
+        if success:
+            try:
+                validation_prices = price_dataframe(
+                    validation,
+                    "svcj",
+                    dict(result.params),
+                    fft_params_base=FFT_BASE,
+                    dynamic_b=False,
+                    fft_params_by_expiry=fft_params_by_expiry,
+                    use_cache=True,
+                )
+                validation_errors = compute_errors(
+                    validation["mid_price_clean"].to_numpy(dtype=float),
+                    validation_prices,
+                )
+                rmse_validation = float(validation_errors["rmse"])
+                mae_validation = float(validation_errors["mae"])
+                if not np.isfinite(rmse_validation):
+                    success = False
+                    message += " (non-finite validation prices)"
+            except Exception as exc:
+                success = False
+                message += f" (validation pricing exception: {exc!r})"
+
+        row = {
+            "timestamp": ts_iso,
+            "currency": currency,
+            "success": bool(success),
+            "message": message,
+            "nfev": int(result.nfev),
+            "rmse_validation": rmse_validation,
+            "mae_validation": mae_validation,
+            "n_options_total": int(len(filt)),
+            "n_train": int(len(train)),
+            "n_validation": int(len(validation)),
+            "n_test": int(len(test)),
+            "random_seed": int(seed),
+        }
+        row.update({name: float(result.params[name]) for name in SVCJ_PARAM_NAMES})
+        row.update({name: getattr(result, name) for name in DIAGNOSTIC_NAMES})
+        rows.append(row)
+
+        # Match the full pipeline: only successful calibrations advance the
+        # chronological warm-start / regularization anchor.
+        if success:
+            warm_svcj = dict(result.params)
+
+        if (file_index + 1) % 25 == 0 or file_index + 1 == len(files):
+            completed = pd.DataFrame(rows)
+            ok = completed.loc[completed["success"] == True]
+            mean_rmse = pd.to_numeric(ok["rmse_validation"], errors="coerce").mean()
+            print(
+                f"lambda={lam:g} {currency}: {file_index + 1}/{len(files)} | "
+                f"success={len(ok)}/{len(completed)} | validation_rmse={mean_rmse:.8f}",
+                flush=True,
+            )
+
+    frame = pd.DataFrame(rows)
+    if len(frame) != EXPECTED_SNAPSHOTS:
+        raise RuntimeError(
+            f"Expected {EXPECTED_SNAPSHOTS} parameter rows for {currency}, found {len(frame)}"
+        )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        for model, sheet in (
-            ("black", "black_params"),
-            ("heston", "heston_params"),
-            ("svcj", "svcj_params"),
-        ):
-            frame = pd.concat(rows[model], ignore_index=True) if rows[model] else pd.DataFrame()
-            frame.to_excel(writer, sheet_name=sheet, index=False)
+        frame.to_excel(writer, sheet_name="svcj_params", index=False)
 
-    svcj = pd.concat(rows["svcj"], ignore_index=True)
+    ok = frame.loc[frame["success"] == True]
     print(
-        f"Wrote {output} | lambda={lam:g} | rows={len(svcj)} | "
-        f"success={pd.to_numeric(svcj['success'], errors='coerce').mean():.3%} | "
-        f"validation RMSE={pd.to_numeric(svcj['rmse_validation'], errors='coerce').mean():.8f}",
+        f"Wrote {output} | lambda={lam:g} | currency={currency} | rows={len(frame)} | "
+        f"success={len(ok) / len(frame):.3%} | "
+        f"validation RMSE={pd.to_numeric(ok['rmse_validation'], errors='coerce').mean():.8f}",
         flush=True,
     )
 
@@ -153,10 +355,16 @@ def run_candidate(project_root: Path, lam: float, output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lambda-ts", type=float, required=True)
+    parser.add_argument("--currency", choices=sorted(CURRENCY_INDEX), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     args = parser.parse_args()
-    run_candidate(args.project_root.resolve(), args.lambda_ts, args.output.resolve())
+    run_candidate(
+        args.project_root.resolve(),
+        args.lambda_ts,
+        args.currency,
+        args.output.resolve(),
+    )
 
 
 if __name__ == "__main__":
