@@ -10,6 +10,7 @@ import pandas as pd
 
 from tests._path import ROOT  # noqa: F401
 from notebooks._lib import chapter3_final
+from scripts.finalize_task9_selection import discover_candidate_parts
 
 
 PARAM_COLS = [
@@ -113,6 +114,32 @@ class RegularizationSelectionTests(unittest.TestCase):
         )
         # RMSE ties -> MAE tie between 10 and 1 -> lower roughness wins (10).
         self.assertEqual(chapter3_final.select_regularisation_candidate(summary), 10)
+
+    def test_split_candidate_discovery_requires_both_currencies_for_every_lambda(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            expected = {0, 1}
+            for reg in expected:
+                for currency in ("BTC", "ETH"):
+                    (root / f"calibration_results_reg_{reg}_{currency}.xlsx").touch()
+
+            parts = discover_candidate_parts(root, expected_grid=expected)
+            self.assertEqual(set(parts), expected)
+            for reg in expected:
+                self.assertEqual(set(parts[reg]), {"BTC", "ETH"})
+
+            (root / "calibration_results_reg_1_ETH.xlsx").unlink()
+            with self.assertRaisesRegex(RuntimeError, "candidate artifact grid mismatch"):
+                discover_candidate_parts(root, expected_grid=expected)
+
+    def test_split_candidate_discovery_rejects_duplicate_or_unexpected_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for currency in ("BTC", "ETH"):
+                (root / f"calibration_results_reg_0_{currency}.xlsx").touch()
+            (root / "calibration_results_reg_0_XRP.xlsx").touch()
+            with self.assertRaisesRegex(RuntimeError, "unexpected task 9 candidate filename"):
+                discover_candidate_parts(root, expected_grid={0})
 
     def test_pending_lock_blocks_final_reporting_and_locked_record_parses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
