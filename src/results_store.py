@@ -6,7 +6,7 @@ This module owns the schema for ``calibration_results.xlsx`` and provides:
 
 - creation of an empty workbook (as a dict of DataFrames)
 - loading an existing workbook (schema-tolerant)
-- appending new rows (params + train/test option rows)
+- appending new rows (params + train/validation/test option rows)
 - crash-safe (atomic) flushing to disk
 
 Design goals
@@ -40,6 +40,7 @@ PARAM_SHEET_HESTON = "heston_params"
 PARAM_SHEET_SVCJ = "svcj_params"
 
 TRAIN_SHEET = "train_data"
+VALIDATION_SHEET = "validation_data"
 TEST_SHEET = "test_data"
 
 
@@ -53,10 +54,13 @@ PARAM_COLS_COMMON = [
     "mae_fit",
     "rmse_train",
     "mae_train",
+    "rmse_validation",
+    "mae_validation",
     "rmse_test",
     "mae_test",
     "n_options_total",
     "n_train",
+    "n_validation",
     "n_test",
     "random_seed",
     "regularization_active",
@@ -87,7 +91,7 @@ PARAM_COLS_SVCJ = PARAM_COLS_COMMON + [
 ]
 
 
-# Preferred (front) columns for train/test sheets; any other columns will be
+# Preferred (front) columns for train/validation/test sheets; any other columns will be
 # appended after these.
 TRAIN_TEST_FRONT_COLS = [
     "snapshot_ts",
@@ -105,6 +109,7 @@ TRAIN_TEST_FRONT_COLS = [
     "open_interest",
     "vega",
     "random_seed",
+    "split",
     "price_black",
     "price_heston",
     "price_svcj",
@@ -119,6 +124,7 @@ class WorkbookSchema:
     param_sheet_heston: str = PARAM_SHEET_HESTON
     param_sheet_svcj: str = PARAM_SHEET_SVCJ
     train_sheet: str = TRAIN_SHEET
+    validation_sheet: str = VALIDATION_SHEET
     test_sheet: str = TEST_SHEET
 
 
@@ -135,6 +141,7 @@ def init_empty_workbook() -> Dict[str, pd.DataFrame]:
         PARAM_SHEET_HESTON: _empty_df(PARAM_COLS_HESTON),
         PARAM_SHEET_SVCJ: _empty_df(PARAM_COLS_SVCJ),
         TRAIN_SHEET: pd.DataFrame(),
+        VALIDATION_SHEET: pd.DataFrame(),
         TEST_SHEET: pd.DataFrame(),
     }
 
@@ -191,15 +198,13 @@ def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
         if sheet_name in sheets:
             wb[sheet_name] = ensure_param_columns(sheets[sheet_name], expected_cols)
 
-    # train/test: keep as-is; we'll align columns on append
-    if TRAIN_SHEET in sheets:
-        wb[TRAIN_SHEET] = sheets[TRAIN_SHEET].copy()
-        if "snapshot_ts" in wb[TRAIN_SHEET].columns:
-            wb[TRAIN_SHEET]["snapshot_ts"] = normalize_timestamp_series(wb[TRAIN_SHEET]["snapshot_ts"])
-    if TEST_SHEET in sheets:
-        wb[TEST_SHEET] = sheets[TEST_SHEET].copy()
-        if "snapshot_ts" in wb[TEST_SHEET].columns:
-            wb[TEST_SHEET]["snapshot_ts"] = normalize_timestamp_series(wb[TEST_SHEET]["snapshot_ts"])
+    # Option splits: legacy workbooks may not contain validation_data.  Such
+    # workbooks remain loadable for comparison; new writes always include it.
+    for sheet_name in (TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET):
+        if sheet_name in sheets:
+            wb[sheet_name] = sheets[sheet_name].copy()
+            if "snapshot_ts" in wb[sheet_name].columns:
+                wb[sheet_name]["snapshot_ts"] = normalize_timestamp_series(wb[sheet_name]["snapshot_ts"])
 
     return wb
 
@@ -289,12 +294,12 @@ def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> Non
             df = df.sort_values(["currency", "timestamp_dt"]).drop(columns=["timestamp_dt"])
         wb_to_write[sh] = df
 
-    # order train/test columns
-    wb_to_write[TRAIN_SHEET] = order_train_test_columns(wb_to_write.get(TRAIN_SHEET, pd.DataFrame()))
-    wb_to_write[TEST_SHEET] = order_train_test_columns(wb_to_write.get(TEST_SHEET, pd.DataFrame()))
+    # order option-split columns
+    for sh in [TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]:
+        wb_to_write[sh] = order_train_test_columns(wb_to_write.get(sh, pd.DataFrame()))
 
-    # sort train/test rows
-    for sh in [TRAIN_SHEET, TEST_SHEET]:
+    # sort option-split rows
+    for sh in [TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]:
         df = wb_to_write.get(sh, pd.DataFrame()).copy()
         if len(df):
             df["_snapshot_dt"] = pd.to_datetime(df.get("snapshot_ts", pd.Series([pd.NaT] * len(df))), utc=True, errors="coerce")
@@ -329,6 +334,7 @@ __all__ = [
     "PARAM_SHEET_HESTON",
     "PARAM_SHEET_SVCJ",
     "TRAIN_SHEET",
+    "VALIDATION_SHEET",
     "TEST_SHEET",
     "PARAM_COLS_BLACK",
     "PARAM_COLS_HESTON",

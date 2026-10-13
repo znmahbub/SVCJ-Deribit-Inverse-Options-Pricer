@@ -29,6 +29,7 @@ from src.results_store import (
     PARAM_SHEET_SVCJ,
     TEST_SHEET,
     TRAIN_SHEET,
+    VALIDATION_SHEET,
 )
 
 try:
@@ -76,6 +77,7 @@ class HedgingConfig:
     rebalance_every_n_snapshots: int = 1
     max_snapshot_groups: int | None = None
     currencies: tuple[str, ...] | None = None
+    evaluation_splits: tuple[str, ...] = ("test",)
     exclude_expiry_crossing: bool = True
     fft_params: FFTParams = field(
         default_factory=lambda: FFTParams(
@@ -90,6 +92,11 @@ class HedgingConfig:
     def __post_init__(self) -> None:
         if int(self.rebalance_every_n_snapshots) < 1:
             raise ValueError("rebalance_every_n_snapshots must be >= 1")
+        allowed = {"train", "validation", "test"}
+        requested = tuple(str(x).lower() for x in self.evaluation_splits)
+        if not requested or not set(requested).issubset(allowed):
+            raise ValueError("evaluation_splits must contain train/validation/test only")
+        object.__setattr__(self, "evaluation_splits", requested)
 
 
 def _to_utc_ts(x: Any) -> pd.Timestamp:
@@ -148,16 +155,38 @@ def _make_progress(total: int, desc: str):
 
 
 def load_calibration_workbook(path: Path) -> dict[str, pd.DataFrame]:
-    needed = [*PARAM_SHEETS.values(), TRAIN_SHEET, TEST_SHEET]
-    return {sheet: pd.read_excel(path, sheet_name=sheet, engine="openpyxl") for sheet in needed}
+    sheets = pd.read_excel(path, sheet_name=None, engine="openpyxl")
+    needed = [*PARAM_SHEETS.values(), TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]
+    out: dict[str, pd.DataFrame] = {}
+    for sheet in needed:
+        if sheet in sheets:
+            out[sheet] = sheets[sheet].copy()
+        elif sheet == VALIDATION_SHEET:
+            out[sheet] = pd.DataFrame()
+        else:
+            raise ValueError(f"Calibration workbook missing required sheet: {sheet}")
+    return out
 
 
-def combine_option_sheets(workbook: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    train = workbook[TRAIN_SHEET].copy()
-    test = workbook[TEST_SHEET].copy()
-    train["split"] = "train"
-    test["split"] = "test"
-    df = pd.concat([train, test], ignore_index=True, sort=False)
+def combine_option_sheets(
+    workbook: dict[str, pd.DataFrame],
+    *,
+    splits: tuple[str, ...] = ("test",),
+) -> pd.DataFrame:
+    """Combine explicitly requested calibration splits; default is untouched test."""
+    sheet_for = {"train": TRAIN_SHEET, "validation": VALIDATION_SHEET, "test": TEST_SHEET}
+    frames: list[pd.DataFrame] = []
+    for split in tuple(str(x).lower() for x in splits):
+        if split not in sheet_for:
+            raise ValueError(f"Unknown split: {split}")
+        frame = workbook.get(sheet_for[split], pd.DataFrame()).copy()
+        if frame.empty:
+            continue
+        frame["split"] = split
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True, sort=False)
 
     df["snapshot_ts"] = pd.to_datetime(df["snapshot_ts"], utc=True)
     if "expiry_datetime" in df.columns:
@@ -753,15 +782,31 @@ def make_summary_tables_from_panel(panel: pd.DataFrame) -> dict[str, pd.DataFram
     }
 
 
-def prepare_output_option_sheets(options: pd.DataFrame, workbook: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    base_train_cols = list(workbook[TRAIN_SHEET].columns)
-    base_test_cols = list(workbook[TEST_SHEET].columns)
+def prepare_output_option_sheets(
+    options: pd.DataFrame,
+    workbook: dict[str, pd.DataFrame],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     enriched = options.copy()
-    train = enriched[enriched["split"] == "train"].copy()
-    test = enriched[enriched["split"] == "test"].copy()
-    train_out = train[base_train_cols + DELTA_OUTPUT_COLS].copy()
-    test_out = test[base_test_cols + DELTA_OUTPUT_COLS].copy()
-    return train_out, test_out
+
+    def one(split: str, sheet: str) -> pd.DataFrame:
+        base = workbook.get(sheet, pd.DataFrame()).copy()
+        base_cols = list(base.columns)
+        selected = enriched.loc[enriched.get("split", pd.Series(index=enriched.index, dtype=object)) == split].copy()
+        if selected.empty:
+            for col in DELTA_OUTPUT_COLS:
+                if col not in base.columns:
+                    base[col] = np.nan
+            return base
+        for col in DELTA_OUTPUT_COLS:
+            if col not in selected.columns:
+                selected[col] = np.nan
+        return selected[[c for c in base_cols if c in selected.columns] + DELTA_OUTPUT_COLS].copy()
+
+    return (
+        one("train", TRAIN_SHEET),
+        one("validation", VALIDATION_SHEET),
+        one("test", TEST_SHEET),
+    )
 
 
 def make_notes(cfg: HedgingConfig, panel: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame, used_perp_file: str, used_funding_file: str | None) -> pd.DataFrame:
@@ -781,6 +826,7 @@ def make_notes(cfg: HedgingConfig, panel: pd.DataFrame, perp: pd.DataFrame, fund
         ("delta_quad_n", cfg.delta_quad_n),
         ("max_snapshot_groups", cfg.max_snapshot_groups),
         ("currencies", None if cfg.currencies is None else ",".join(cfg.currencies)),
+        ("evaluation_splits", ",".join(cfg.evaluation_splits)),
         ("delta_definition", "regular_delta = dV_usd/dF"),
         ("net_delta_definition", "net_delta = F * dV_coin/dF = regular_delta - V_coin"),
         ("inverse_perp_pnl_definition", "hedge_pnl_coin = N_usd * (1/H_t - 1/H_t1)"),
@@ -831,7 +877,7 @@ def _write_df_to_sheet_chunked(wb: Workbook, sheet_name: str, df: pd.DataFrame) 
         _style_sheet(ws)
 
 
-def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], train_data: pd.DataFrame, test_data: pd.DataFrame, price_verification: pd.DataFrame, interval_panel: pd.DataFrame, summary_tables: dict[str, pd.DataFrame], notes: pd.DataFrame) -> None:
+def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], train_data: pd.DataFrame, validation_data: pd.DataFrame, test_data: pd.DataFrame, price_verification: pd.DataFrame, interval_panel: pd.DataFrame, summary_tables: dict[str, pd.DataFrame], notes: pd.DataFrame) -> None:
     wb = Workbook()
     wb.remove(wb.active)
     ordered = [
@@ -839,6 +885,7 @@ def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], t
         ("heston_params", workbook["heston_params"].copy()),
         ("svcj_params", workbook["svcj_params"].copy()),
         (TRAIN_SHEET, train_data),
+        (VALIDATION_SHEET, validation_data),
         (TEST_SHEET, test_data),
         ("hedge_interval_panel", interval_panel),
         ("hedge_summary_overall", summary_tables["hedge_summary_overall"]),
@@ -864,7 +911,7 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
         outer.update(1)
 
         outer.set_description("combine options")
-        options = filter_options_for_run(combine_option_sheets(workbook), cfg)
+        options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)
         param_lookup = build_param_lookup(workbook)
         outer.update(1)
 
@@ -904,16 +951,17 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
 
         outer.set_description("summaries")
         summary_tables = make_summary_tables_from_panel(interval_panel)
-        train_data, test_data = prepare_output_option_sheets(options, workbook)
+        train_data, validation_data, test_data = prepare_output_option_sheets(options, workbook)
         notes = make_notes(cfg, interval_panel, perp, funding, used_perp_file, used_funding_file)
         outer.update(1)
 
         outer.set_description("write workbook")
-        write_hedge_workbook(cfg.output_xlsx, workbook, train_data, test_data, price_verification, interval_panel, summary_tables, notes)
+        write_hedge_workbook(cfg.output_xlsx, workbook, train_data, validation_data, test_data, price_verification, interval_panel, summary_tables, notes)
         outer.update(1)
 
         return {
             TRAIN_SHEET: train_data,
+            VALIDATION_SHEET: validation_data,
             TEST_SHEET: test_data,
             "price_verification": price_verification,
             "hedge_interval_panel": interval_panel,

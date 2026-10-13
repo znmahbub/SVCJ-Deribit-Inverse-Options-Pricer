@@ -44,6 +44,7 @@ from .results_store import (
     PARAM_SHEET_SVCJ,
     TEST_SHEET,
     TRAIN_SHEET,
+    VALIDATION_SHEET,
     append_df,
     flush_workbook_atomic,
     get_latest_processed_timestamp,
@@ -52,6 +53,7 @@ from .results_store import (
     load_existing_workbook,
 )
 from .snapshot_job import process_snapshot_to_payload, timestamp_from_filename
+from .splitting import SplitConfig
 
 
 try:
@@ -127,7 +129,9 @@ class BatchConfig:
     fft_base: FFTParams = FFTParams(N=2 ** 12, eta=0.10, alpha=1.5, b=-10.0, use_simpson=True)
 
     # Calibration knobs
-    train_frac: float = 0.70
+    train_frac: float = 0.60
+    validation_frac: float = 0.20
+    test_frac: float = 0.20
     global_random_seed: int = 123
     max_nfev: Dict[str, int] = field(default_factory=lambda: dict(black=200, heston=200, svcj=200))
     l2_prev_strength: float = 0.0
@@ -161,6 +165,13 @@ class BatchConfig:
         )
         self.save_every_n_files = int(self.save_every_n_files)
         self.n_workers = int(self.n_workers)
+        # Validate the configured fractions once at construction time.
+        SplitConfig(
+            train_frac=float(self.train_frac),
+            validation_frac=float(self.validation_frac),
+            test_frac=float(self.test_frac),
+            random_seed=int(self.global_random_seed),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -316,10 +327,13 @@ def run_currency_to_excel(
             mae_fit=float("nan"),
             rmse_train=float("nan"),
             mae_train=float("nan"),
+            rmse_validation=float("nan"),
+            mae_validation=float("nan"),
             rmse_test=float("nan"),
             mae_test=float("nan"),
             n_options_total=0,
             n_train=0,
+            n_validation=0,
             n_test=0,
             random_seed=int(seed),
         )
@@ -350,6 +364,7 @@ def run_currency_to_excel(
             "currency": currency,
             "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
             "train_df": pd.DataFrame(),
+            "validation_df": pd.DataFrame(),
             "test_df": pd.DataFrame(),
             "warm_next": warm or {},
         }
@@ -380,6 +395,8 @@ def run_currency_to_excel(
                             fft_base=cfg.fft_base,
                             max_nfev=cfg.max_nfev,
                             train_frac=cfg.train_frac,
+                            validation_frac=cfg.validation_frac,
+                            test_frac=cfg.test_frac,
                             random_seed=seed,
                             runtime_top_expiries_by_oi=cfg.runtime_top_expiries_by_oi,
                             runtime_max_options=cfg.runtime_max_options,
@@ -432,6 +449,7 @@ def run_currency_to_excel(
                 append_df(workbook, PARAM_SHEET_SVCJ, param_rows["svcj"])
 
             append_df(workbook, TRAIN_SHEET, pld.get("train_df", pd.DataFrame()))
+            append_df(workbook, VALIDATION_SHEET, pld.get("validation_df", pd.DataFrame()))
             append_df(workbook, TEST_SHEET, pld.get("test_df", pd.DataFrame()))
 
             next_commit += 1

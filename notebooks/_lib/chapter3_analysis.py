@@ -87,6 +87,7 @@ class AnalysisState:
     heston_params: pd.DataFrame
     svcj_params: pd.DataFrame
     train_data: pd.DataFrame
+    validation_data: pd.DataFrame
     test_data: pd.DataFrame
     results_long: pd.DataFrame
     results_ok: pd.DataFrame
@@ -105,21 +106,25 @@ def initialize_notebook_defaults() -> np.random.Generator:
     return np.random.default_rng(123)
 
 
-def load_workbook(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_workbook(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     black_params = pd.read_excel(path, sheet_name="black_params")
     heston_params = pd.read_excel(path, sheet_name="heston_params")
     svcj_params = pd.read_excel(path, sheet_name="svcj_params")
     train_data = pd.read_excel(path, sheet_name="train_data")
-    test_data = pd.read_excel(path, sheet_name="test_data")
+    with pd.ExcelFile(path, engine="openpyxl") as xls:
+        validation_data = pd.read_excel(xls, sheet_name="validation_data") if "validation_data" in xls.sheet_names else pd.DataFrame(columns=train_data.columns)
+        test_data = pd.read_excel(xls, sheet_name="test_data")
 
     for frame in (black_params, heston_params, svcj_params):
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
 
-    for frame in (train_data, test_data):
-        frame["snapshot_ts"] = pd.to_datetime(frame["snapshot_ts"], utc=True)
-        frame["expiry_datetime"] = pd.to_datetime(frame["expiry_datetime"], utc=True)
+    for frame in (train_data, validation_data, test_data):
+        if "snapshot_ts" in frame.columns:
+            frame["snapshot_ts"] = pd.to_datetime(frame["snapshot_ts"], utc=True)
+        if "expiry_datetime" in frame.columns:
+            frame["expiry_datetime"] = pd.to_datetime(frame["expiry_datetime"], utc=True)
 
-    return black_params, heston_params, svcj_params, train_data, test_data
+    return black_params, heston_params, svcj_params, train_data, validation_data, test_data
 
 
 def _to_long(df: pd.DataFrame, model_name: str, param_cols: list[str]) -> pd.DataFrame:
@@ -134,15 +139,22 @@ def _to_long(df: pd.DataFrame, model_name: str, param_cols: list[str]) -> pd.Dat
         "mae_fit",
         "rmse_train",
         "mae_train",
+        "rmse_validation",
+        "mae_validation",
         "rmse_test",
         "mae_test",
         "n_options_total",
         "n_train",
+        "n_validation",
         "n_test",
         "random_seed",
     ]
+    work = df.copy()
+    for col in base_cols:
+        if col not in work.columns:
+            work[col] = np.nan
     keep = base_cols + param_cols
-    out = df[keep].copy()
+    out = work[keep].copy()
     out["model"] = model_name
     return out
 
@@ -742,11 +754,12 @@ def plot_param_boxplots(results_long_df: pd.DataFrame, currency: str, model: str
 
 def build_analysis_state(data_path: Path, *, rng: np.random.Generator | None = None) -> AnalysisState:
     current_rng = rng or initialize_notebook_defaults()
-    black_params, heston_params, svcj_params, train_data, test_data = load_workbook(data_path)
+    black_params, heston_params, svcj_params, train_data, validation_data, test_data = load_workbook(data_path)
     results_long, results_ok = build_results_long(black_params, heston_params, svcj_params)
     opt_metrics = pd.concat(
         [
             compute_snapshot_metrics_from_quotes(train_data, "train"),
+            compute_snapshot_metrics_from_quotes(validation_data, "validation"),
             compute_snapshot_metrics_from_quotes(test_data, "test"),
         ],
         ignore_index=True,
@@ -764,6 +777,7 @@ def build_analysis_state(data_path: Path, *, rng: np.random.Generator | None = N
         heston_params=heston_params,
         svcj_params=svcj_params,
         train_data=train_data,
+        validation_data=validation_data,
         test_data=test_data,
         results_long=results_long,
         results_ok=results_ok,
@@ -785,13 +799,13 @@ def run_currency_report(state: AnalysisState, currency: str, *, n_boot: int = 30
 
     display(sub.groupby("model")["success"].mean().to_frame("success_rate"))
 
-    for split in ["train", "test"]:
+    for split in ["train", "validation", "test"]:
         plot_error_timeseries(state.results_long, currency, split=split).show()
         plot_error_boxplots(state.results_long, currency, split=split).show()
         print(f"Summary table — {currency} / {split}")
         display(error_summary_table(state.results_long, currency, split=split, n_boot=n_boot, rng=state.rng))
 
-    for split in ["train", "test"]:
+    for split in ["train", "validation", "test"]:
         spread_metric_timeseries(state.opt_metrics, currency, split=split).show()
         print(f"Spread-relative summary — {currency} / {split}")
         display(spread_metric_summary_table(state.opt_metrics, currency, split=split, n_boot=n_boot, rng=state.rng))

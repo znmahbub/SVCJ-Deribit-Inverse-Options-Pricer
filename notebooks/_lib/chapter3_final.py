@@ -170,7 +170,7 @@ def build_regularisation_tradeoff_figure(reg_summary: pd.DataFrame, *, final_reg
     return fig
 
 
-def load_baseline_workbook(baseline_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_baseline_workbook(baseline_path: Path, *, evaluation_split: str = "test") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     black_params = pd.read_excel(baseline_path, sheet_name="black_params")
     heston_params = pd.read_excel(baseline_path, sheet_name="heston_params")
     svcj_params = pd.read_excel(baseline_path, sheet_name="svcj_params")
@@ -189,8 +189,13 @@ def load_baseline_workbook(baseline_path: Path) -> tuple[pd.DataFrame, pd.DataFr
         "price_heston",
         "price_svcj",
     ]
-    test_data = pd.read_excel(baseline_path, sheet_name="test_data", usecols=test_cols)
+    evaluation_split = str(evaluation_split).lower()
+    if evaluation_split not in {"train", "validation", "test"}:
+        raise ValueError("evaluation_split must be train, validation, or test")
+    # Final headline reporting should leave this at the default untouched test split.
+    test_data = pd.read_excel(baseline_path, sheet_name=f"{evaluation_split}_data", usecols=test_cols)
     test_data["snapshot_ts"] = pd.to_datetime(test_data["snapshot_ts"], utc=True)
+    test_data["evaluation_split"] = evaluation_split
     for model in ["black", "heston", "svcj"]:
         error = test_data[f"price_{model}"] - test_data["mid_price_clean"]
         test_data[f"abs_err_{model}"] = error.abs()

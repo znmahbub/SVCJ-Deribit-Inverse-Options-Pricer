@@ -7,8 +7,8 @@ The public entrypoint :func:`process_snapshot_to_payload` takes a single
 
 1. Filters liquid options (via :func:`src.calibration.filter_liquid_options`).
 2. Builds fixed, per-expiry FFT grids for the snapshot (one FFT per expiry).
-3. Splits deterministically into train/test.
-4. Calibrates Black, Heston, and SVCJ on the train split (warm-started).
+3. Assigns a deterministic train/validation/test cross-sectional split.
+4. Calibrates Black, Heston, and SVCJ on the train split only (warm-started).
 5. Prices *all* filtered options once per model and adds three price columns.
 6. Returns a payload suitable for persistence into an Excel workbook.
 
@@ -27,6 +27,7 @@ import pandas as pd
 
 from .calibration import WeightConfig, calibrate_model, filter_liquid_options, price_dataframe
 from .inverse_fft_pricer import FFTParams, center_fft_params_on_strikes
+from .splitting import SplitConfig, assign_cross_sectional_split
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,8 @@ def process_snapshot_to_payload(
     fft_base: FFTParams,
     max_nfev: dict,
     train_frac: float,
+    validation_frac: float,
+    test_frac: float,
     random_seed: int,
     runtime_top_expiries_by_oi: Optional[int],
     runtime_max_options: Optional[int],
@@ -125,7 +128,7 @@ def process_snapshot_to_payload(
       - ``timestamp_iso``: ISO string from filename
       - ``currency``
       - ``param_rows``: dict(model -> 1-row DataFrame)
-      - ``train_df`` / ``test_df``: priced option rows (with price_* columns)
+      - ``train_df`` / ``validation_df`` / ``test_df``: priced option rows
       - ``warm_next``: dict(model -> params) for warm-starting the next snapshot
     """
 
@@ -147,10 +150,13 @@ def process_snapshot_to_payload(
         mae_fit: float,
         rmse_train: float,
         mae_train: float,
+        rmse_validation: float,
+        mae_validation: float,
         rmse_test: float,
         mae_test: float,
         n_total: int,
         n_train: int,
+        n_validation: int,
         n_test: int,
         params: Optional[dict[str, float]],
         diagnostics: Optional[dict[str, Any]] = None,
@@ -165,10 +171,13 @@ def process_snapshot_to_payload(
             mae_fit=float(mae_fit) if mae_fit is not None else float("nan"),
             rmse_train=float(rmse_train) if rmse_train is not None else float("nan"),
             mae_train=float(mae_train) if mae_train is not None else float("nan"),
+            rmse_validation=float(rmse_validation) if rmse_validation is not None else float("nan"),
+            mae_validation=float(mae_validation) if mae_validation is not None else float("nan"),
             rmse_test=float(rmse_test) if rmse_test is not None else float("nan"),
             mae_test=float(mae_test) if mae_test is not None else float("nan"),
             n_options_total=int(n_total),
             n_train=int(n_train),
+            n_validation=int(n_validation),
             n_test=int(n_test),
             random_seed=int(random_seed),
             regularization_active=False,
@@ -204,8 +213,9 @@ def process_snapshot_to_payload(
                 success=False, message=message, nfev=0,
                 rmse_fit=np.nan, mae_fit=np.nan,
                 rmse_train=np.nan, mae_train=np.nan,
+                rmse_validation=np.nan, mae_validation=np.nan,
                 rmse_test=np.nan,  mae_test=np.nan,
-                n_total=int(n_total), n_train=0, n_test=0,
+                n_total=int(n_total), n_train=0, n_validation=0, n_test=0,
                 params=_NAN_PARAMS[m],
             )
             for m in ("black", "heston", "svcj")
@@ -216,6 +226,7 @@ def process_snapshot_to_payload(
             "currency": currency,
             "param_rows": rows,
             "train_df": empty_tt,
+            "validation_df": empty_tt,
             "test_df": empty_tt,
             "warm_next": warm_next,
         }
@@ -269,17 +280,22 @@ def process_snapshot_to_payload(
         K_all = g["strike"].to_numpy(dtype=float)
         fft_params_by_expiry[exp] = _fft_params_for_expiry(K_all)
 
-    # Deterministic split (shuffled)
-    df_filt = df_filt.sample(frac=1.0, random_state=random_seed).reset_index(drop=True)
+    # Deterministic within-snapshot three-way cross-sectional split.  The split
+    # is assigned once and then reused by every model; model choice never resplits.
+    df_filt = df_filt.reset_index(drop=True).copy()
+    split_cfg = SplitConfig(
+        train_frac=float(train_frac),
+        validation_frac=float(validation_frac),
+        test_frac=float(test_frac),
+        random_seed=int(random_seed),
+    )
+    df_filt["split"] = assign_cross_sectional_split(df_filt, split_cfg).to_numpy()
     n_total_rows = int(len(df_filt))
-    n_train = int(np.floor(train_frac * n_total_rows))
-    # Keep calibration numerically meaningful even if train_frac is extreme.
-    if n_total_rows > 1:
-        n_train = min(max(n_train, 1), n_total_rows - 1)
-    else:
-        n_train = n_total_rows
-    train = df_filt.iloc[:n_train].copy()
-    test = df_filt.iloc[n_train:].copy()
+    train = df_filt.loc[df_filt["split"] == "train"].copy()
+    validation = df_filt.loc[df_filt["split"] == "validation"].copy()
+    test = df_filt.loc[df_filt["split"] == "test"].copy()
+    n_train = int(len(train))
+    n_validation = int(len(validation))
 
     # Warm-start initializations
     init_black = warm_start.get("black", None)
@@ -364,7 +380,7 @@ def process_snapshot_to_payload(
                 except Exception:
                     sigma_seed = sigma_seed
 
-    # Reprice full snapshot once per model (then split train/test for output & errors)
+    # Reprice full snapshot once per model, then reuse the frozen three-way split.
     df_out = df_filt.copy()
     df_out["snapshot_ts"] = ts_iso
     df_out["currency"] = currency
@@ -392,28 +408,35 @@ def process_snapshot_to_payload(
         else:
             df_out[col] = np.nan
 
-    train_out = df_out.iloc[:n_train].copy()
-    test_out = df_out.iloc[n_train:].copy()
+    train_out = df_out.loc[df_out["split"] == "train"].copy()
+    validation_out = df_out.loc[df_out["split"] == "validation"].copy()
+    test_out = df_out.loc[df_out["split"] == "test"].copy()
 
-    # Errors (unweighted)
+    # Errors (unweighted) are reported separately for all three splits.
     y_train = train_out["mid_price_clean"].to_numpy(dtype=float) if len(train_out) else np.array([])
+    y_validation = validation_out["mid_price_clean"].to_numpy(dtype=float) if len(validation_out) else np.array([])
     y_test = test_out["mid_price_clean"].to_numpy(dtype=float) if len(test_out) else np.array([])
 
     errs: dict[str, dict[str, float]] = {}
     for model in models:
         col = price_cols[model]
         p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
+        p_validation = validation_out[col].to_numpy(dtype=float) if len(validation_out) else np.array([])
         p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
         e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
+        e_va = compute_errors(y_validation, p_validation) if len(validation_out) else {"rmse": np.nan, "mae": np.nan}
         e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
         errs[model] = dict(
             rmse_train=float(e_tr["rmse"]),
             mae_train=float(e_tr["mae"]),
+            rmse_validation=float(e_va["rmse"]),
+            mae_validation=float(e_va["mae"]),
             rmse_test=float(e_te["rmse"]),
             mae_test=float(e_te["mae"]),
         )
 
     n_total = int(len(df_out))
+    n_validation = int(len(validation_out))
     n_test = int(len(test_out))
 
     # Build one parameter row per model, dispatching on result type.
@@ -424,9 +447,11 @@ def process_snapshot_to_payload(
         common = dict(
             rmse_train=model_errs["rmse_train"],
             mae_train=model_errs["mae_train"],
+            rmse_validation=model_errs["rmse_validation"],
+            mae_validation=model_errs["mae_validation"],
             rmse_test=model_errs["rmse_test"],
             mae_test=model_errs["mae_test"],
-            n_total=n_total, n_train=n_train, n_test=n_test,
+            n_total=n_total, n_train=n_train, n_validation=n_validation, n_test=n_test,
         )
         if isinstance(result, dict):
             # Exception raised inside the calibration try/except block.
@@ -477,6 +502,7 @@ def process_snapshot_to_payload(
         "currency": currency,
         "param_rows": {"black": black_row, "heston": heston_row, "svcj": svcj_row},
         "train_df": train_out,
+        "validation_df": validation_out,
         "test_df": test_out,
         "warm_next": warm_next,
     }

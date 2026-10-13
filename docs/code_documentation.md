@@ -344,3 +344,21 @@ become the warm start and transformed-space L2 anchor for the next snapshot.
 Resume reconstructs the anchor from the latest successful parameter row before
 the first pending timestamp. Parallel chunk processing remains available only
 when `l2_prev_strength == 0`.
+
+
+### Deterministic train/validation/test holdout
+
+Each filtered snapshot is assigned once to a deterministic 60/20/20
+cross-sectional split through `SplitConfig` and
+`assign_cross_sectional_split(...)`. Assignment is stratified by
+`(expiry_datetime, option_type)` when the stratum is large enough; rows from
+one- and two-observation strata use a deterministic pooled fallback. Every row
+appears in exactly one split and the train set is always nonempty.
+
+All models calibrate on `train` only and then price the full frozen snapshot.
+Workbooks now contain `train_data`, `validation_data`, and `test_data`, together
+with separate parameter-row RMSE/MAE and counts for each split. Legacy two-way
+workbooks remain loadable for historical comparison with an empty validation
+sheet. The hedging pipeline defaults to `test_data` only for headline evidence;
+other splits must be requested explicitly through `evaluation_splits` for
+diagnostics.
