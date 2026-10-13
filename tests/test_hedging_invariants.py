@@ -8,7 +8,7 @@ import pandas as pd
 
 from tests._path import ROOT  # noqa: F401  (ensures src is importable)
 
-from src.hedging_analysis import compute_prices_and_deltas  # noqa: E402
+from src.hedging_analysis import build_hedge_interval_panel, compute_prices_and_deltas  # noqa: E402
 
 
 class TestHedgingInvariants(unittest.TestCase):
@@ -160,6 +160,45 @@ class TestHedgingInvariants(unittest.TestCase):
                 self.assertLess(d, 0.0, f"Put delta should be negative, got {d}")
                 self.assertGreaterEqual(d, -1.0 - 1e-6, f"Put delta should be ≥ −1, got {d}")
 
+
+    def test_regular_and_net_hedges_share_identical_term_perp_mapping(self) -> None:
+        """With F_term != H_perp, both rules must use H_perp^2/F_term."""
+        options = pd.DataFrame(
+            {
+                "snapshot_ts": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "eval_snapshot_ts": [pd.Timestamp("2026-01-01T06:00:00Z")],
+                "currency": ["BTC"],
+                "split": ["test"],
+                "instrument_name": ["BTC-TEST"],
+                "option_type": ["call"],
+                "strike": [10_000.0],
+                "time_to_maturity": [0.25],
+                "F0": [10_000.0],
+                "perp_close_t": [9_800.0],
+                "perp_close_t1": [9_900.0],
+                "mid_price_clean": [0.10],
+                "eval_market_price": [0.105],
+                "is_hedgeable_interval": [True],
+                "expires_before_eval_snapshot": [False],
+                "regular_delta_black": [0.40],
+                "net_delta_black": [0.30],
+                "regular_delta_heston": [0.40],
+                "net_delta_heston": [0.30],
+                "regular_delta_svcj": [0.40],
+                "net_delta_svcj": [0.30],
+            }
+        )
+        panel = build_hedge_interval_panel(options)
+        scale = 9_800.0 ** 2 / 10_000.0
+        for model in ("black", "heston", "svcj"):
+            self.assertAlmostEqual(
+                float(panel.loc[0, f"hedge_notional_usd_{model}_delta"]),
+                scale * 0.40,
+            )
+            self.assertAlmostEqual(
+                float(panel.loc[0, f"hedge_notional_usd_{model}_net_delta"]),
+                scale * 0.30,
+            )
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

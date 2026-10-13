@@ -21,6 +21,7 @@ from src.greeks import (
     net_delta as inverse_net_delta,
     regular_delta_from_call_p1,
 )
+from src.hedge_mapping import hedge_notional_usd, inverse_perp_pnl
 from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj
 from src.results_store import (
     PARAM_SHEET_BLACK,
@@ -599,7 +600,13 @@ def build_hedge_interval_panel(options: pd.DataFrame, *, exclude_expiry_crossing
     F_t = _num(options["F0"])
     H_t = _num(options["perp_close_t"])
     H_t1 = _num(options["perp_close_t1"])
-    inverse_move = np.where(np.isfinite(H_t) & np.isfinite(H_t1) & (H_t > 0) & (H_t1 > 0), (1.0 / H_t) - (1.0 / H_t1), np.nan)
+    valid_basis = np.isfinite(F_t) & np.isfinite(H_t) & (F_t > 0) & (H_t > 0)
+    notional_scale = np.where(valid_basis, (H_t ** 2) / F_t, np.nan)
+    panel["F_term"] = F_t
+    panel["H_perp"] = H_t
+    panel["basis_ratio"] = np.where(valid_basis, H_t / F_t, np.nan)
+    panel["dF_dH_assumption"] = 1.0
+    panel["hedge_notional_scale_usd_per_delta"] = notional_scale
     panel["rebalance_every_n_snapshots"] = int(rebalance_every_n_snapshots)
     panel["option_price_coin_t"] = opt_t
     panel["option_price_coin_t1"] = opt_t1
@@ -609,13 +616,27 @@ def build_hedge_interval_panel(options: pd.DataFrame, *, exclude_expiry_crossing
         panel["is_summary_eligible"] &= ~options["expires_before_eval_snapshot"].fillna(False)
 
     for model in MODELS:
-        reg_delta = _num(options[f"regular_delta_{model}"])
-        net_delta = _num(options[f"net_delta_{model}"])
-        panel[f"hedge_notional_usd_{model}_delta"] = H_t * reg_delta
-        panel[f"net_pnl_coin_{model}_delta"] = panel["option_pnl_coin_short"] + panel[f"hedge_notional_usd_{model}_delta"] * inverse_move
-        net_scale = np.where(np.isfinite(F_t) & (F_t > 0), (H_t ** 2) / F_t, np.nan)
-        panel[f"hedge_notional_usd_{model}_net_delta"] = net_scale * net_delta
-        panel[f"net_pnl_coin_{model}_net_delta"] = panel["option_pnl_coin_short"] + panel[f"hedge_notional_usd_{model}_net_delta"] * inverse_move
+        delta_by_rule = {
+            "delta": _num(options[f"regular_delta_{model}"]).to_numpy(dtype=float),
+            "net_delta": _num(options[f"net_delta_{model}"]).to_numpy(dtype=float),
+        }
+        for hedge_type, delta_used in delta_by_rule.items():
+            notional = hedge_notional_usd(
+                delta_used,
+                F_t.to_numpy(dtype=float),
+                H_t.to_numpy(dtype=float),
+                option_position=-1.0,
+                dF_dH=1.0,
+            )
+            panel[f"hedge_notional_usd_{model}_{hedge_type}"] = notional
+            panel[f"net_pnl_coin_{model}_{hedge_type}"] = (
+                panel["option_pnl_coin_short"].to_numpy(dtype=float)
+                + inverse_perp_pnl(
+                    notional,
+                    H_t.to_numpy(dtype=float),
+                    H_t1.to_numpy(dtype=float),
+                )
+            )
 
     invalid = ~panel["is_summary_eligible"].fillna(False)
     metric_cols = [c for c in panel.columns if c.startswith("hedge_notional_usd_") or c.startswith("net_pnl_coin_")]
@@ -763,8 +784,9 @@ def make_notes(cfg: HedgingConfig, panel: pd.DataFrame, perp: pd.DataFrame, fund
         ("delta_definition", "regular_delta = dV_usd/dF"),
         ("net_delta_definition", "net_delta = F * dV_coin/dF = regular_delta - V_coin"),
         ("inverse_perp_pnl_definition", "hedge_pnl_coin = N_usd * (1/H_t - 1/H_t1)"),
-        ("delta_hedge_ratio_definition", "N_usd = H_t * regular_delta"),
-        ("net_delta_hedge_ratio_definition", "N_usd = H_t^2 / F_t * net_delta"),
+        ("basis_mapping_assumption", "dF_term/dH_perp = 1 locally"),
+        ("delta_hedge_ratio_definition", "N_usd = H_t^2 / F_t * regular_delta for a short one-option position"),
+        ("net_delta_hedge_ratio_definition", "N_usd = H_t^2 / F_t * net_delta for a short one-option position"),
         ("funding_note", "Funding is summarized but excluded from hedged net PnL metrics."),
         ("exclude_expiry_crossing", cfg.exclude_expiry_crossing),
         ("interval_panel_rows", int(len(panel))),

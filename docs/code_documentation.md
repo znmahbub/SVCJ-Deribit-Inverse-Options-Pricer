@@ -291,3 +291,14 @@ the shifted characteristic function is `phi_Q(u-i) / phi_Q(-i)` and therefore
 `P1 = Q^F(F_T > K)`. Under Black, direct `Q` exercise probability is `N(d2)`,
 while `P1` and call regular delta are `N(d1)`. Net inverse delta is centralized
 as `Delta_net = Delta_regular - V_coin`.
+
+
+### Term-futures to inverse-perpetual hedge mapping
+
+`src/hedge_mapping.py` owns the basis conversion used by the hedging engine. For
+a short one-option position and the baseline local assumption
+`dF_term/dH_perp = 1`, both regular-delta and net-delta rules use exactly
+`N_USD = H_perp^2/F_term * Delta_used`. The benchmark rules therefore differ
+only in `Delta_used`, not in an additional basis approximation. The interval
+panel persists `F_term`, `H_perp`, `basis_ratio`, `dF_dH_assumption`, and the
+notional scale used.
