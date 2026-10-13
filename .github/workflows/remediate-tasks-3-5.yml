@@ -39,6 +39,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Baseline exact pricing-regression diagnostic
+        run: python -m unittest tests.test_regression_reference_outputs -v
+
       - name: Task 3 RED — missing centralized Greek layer
         run: |
           if python -m unittest tests.test_measure_delta_identities -v; then
