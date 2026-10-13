@@ -39,7 +39,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Baseline machine-precision pricing-regression check
+      - name: Baseline portable pricing-regression check
         run: python -m unittest tests.test_regression_reference_outputs -v
 
       - name: Task 3 RED — missing centralized Greek layer
