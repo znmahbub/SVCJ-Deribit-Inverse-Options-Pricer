@@ -290,55 +290,174 @@ def load_locked_regularisation(record_path: Path) -> int:
     return int(value_match.group(1))
 
 
-def load_baseline_workbook(baseline_path: Path, *, evaluation_split: str = "test") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+def option_weighted_rmse(errors) -> float:
+    """RMSE over individual option quotes, after dropping non-finite errors."""
+    values = pd.to_numeric(pd.Series(errors), errors="coerce").to_numpy(dtype=float)
+    values = values[np.isfinite(values)]
+    return float(np.sqrt(np.mean(values * values))) if len(values) else float("nan")
+
+
+def option_weighted_mae(errors) -> float:
+    """MAE over individual option quotes, after dropping non-finite errors."""
+    values = pd.to_numeric(pd.Series(errors), errors="coerce").to_numpy(dtype=float)
+    values = values[np.isfinite(values)]
+    return float(np.mean(np.abs(values))) if len(values) else float("nan")
+
+
+def mean_snapshot_rmse(
+    frame: pd.DataFrame,
+    *,
+    error_col: str,
+    snapshot_col: str = "snapshot_ts",
+) -> float:
+    """Equal-weighted mean of snapshot-specific quote RMSE values."""
+    if frame.empty or error_col not in frame.columns or snapshot_col not in frame.columns:
+        return float("nan")
+    values: list[float] = []
+    for _, group in frame.groupby(snapshot_col, dropna=False):
+        rmse = option_weighted_rmse(group[error_col])
+        if np.isfinite(rmse):
+            values.append(rmse)
+    return float(np.mean(values)) if values else float("nan")
+
+
+def add_common_unit_errors(data: pd.DataFrame) -> pd.DataFrame:
+    """Add explicit coin, USD-equivalent, and spread-normalised pricing errors.
+
+    BTC and ETH coin premiums are economically different units, so raw coin
+    errors are retained only for asset-specific reporting. Cross-asset pooled
+    reporting uses ``F0 * error_coin`` (USD-equivalent at the observation
+    forward) and the dimensionless error measured in full quoted spreads.
+    """
+    out = data.copy()
+    required = {"mid_price_clean", "bid_price", "ask_price"}
+    missing = required - set(out.columns)
+    if missing:
+        raise ValueError(f"pricing metrics missing required columns: {sorted(missing)}")
+
+    if "F0" not in out.columns:
+        if "futures_price" in out.columns:
+            out["F0"] = pd.to_numeric(out["futures_price"], errors="coerce")
+        else:
+            raise ValueError("pricing metrics require F0 or futures_price for common-unit reporting")
+
+    for col in ["F0", "mid_price_clean", "bid_price", "ask_price"]:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    spread = out["ask_price"] - out["bid_price"]
+    valid_spread = np.isfinite(spread) & (spread > 0.0)
+    out["spread_coin"] = np.where(valid_spread, spread, np.nan)
+
+    for model in ["black", "heston", "svcj"]:
+        price_col = f"price_{model}"
+        if price_col not in out.columns:
+            continue
+        out[price_col] = pd.to_numeric(out[price_col], errors="coerce")
+        err = out[price_col] - out["mid_price_clean"]
+        out[f"error_coin_{model}"] = err
+        out[f"abs_error_coin_{model}"] = err.abs()
+        out[f"sq_error_coin_{model}"] = err * err
+        out[f"error_usd_{model}"] = out["F0"] * err
+        out[f"error_spread_units_{model}"] = err / out["spread_coin"]
+        valid_quote = (
+            np.isfinite(out[price_col])
+            & np.isfinite(out["bid_price"])
+            & np.isfinite(out["ask_price"])
+            & (out["ask_price"] >= out["bid_price"])
+        )
+        within = np.where(
+            valid_quote,
+            ((out[price_col] >= out["bid_price"]) & (out[price_col] <= out["ask_price"])).astype(float),
+            np.nan,
+        )
+        out[f"within_spread_{model}"] = within
+
+        # Backward-compatible aliases used by existing bucket/time-series code.
+        out[f"abs_err_{model}"] = out[f"abs_error_coin_{model}"]
+        out[f"sq_err_{model}"] = out[f"sq_error_coin_{model}"]
+        out[f"within_{model}"] = out[f"within_spread_{model}"]
+    return out
+
+
+def load_baseline_workbook(
+    baseline_path: Path,
+    *,
+    evaluation_split: str = "test",
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     black_params = pd.read_excel(baseline_path, sheet_name="black_params")
     heston_params = pd.read_excel(baseline_path, sheet_name="heston_params")
     svcj_params = pd.read_excel(baseline_path, sheet_name="svcj_params")
     for frame in [black_params, heston_params, svcj_params]:
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
 
-    test_cols = [
+    evaluation_split = str(evaluation_split).lower()
+    if evaluation_split not in {"train", "validation", "test"}:
+        raise ValueError("evaluation_split must be train, validation, or test")
+    test_data = pd.read_excel(baseline_path, sheet_name=f"{evaluation_split}_data")
+    required = {
         "snapshot_ts",
         "currency",
         "time_to_maturity",
-        "moneyness",
         "bid_price",
         "ask_price",
         "mid_price_clean",
         "price_black",
         "price_heston",
         "price_svcj",
-    ]
-    evaluation_split = str(evaluation_split).lower()
-    if evaluation_split not in {"train", "validation", "test"}:
-        raise ValueError("evaluation_split must be train, validation, or test")
-    # Final headline reporting should leave this at the default untouched test split.
-    test_data = pd.read_excel(baseline_path, sheet_name=f"{evaluation_split}_data", usecols=test_cols)
+    }
+    missing = required - set(test_data.columns)
+    if missing:
+        raise ValueError(f"{evaluation_split}_data missing required columns: {sorted(missing)}")
     test_data["snapshot_ts"] = pd.to_datetime(test_data["snapshot_ts"], utc=True)
+    test_data["currency"] = test_data["currency"].astype(str).str.upper()
     test_data["evaluation_split"] = evaluation_split
-    for model in ["black", "heston", "svcj"]:
-        error = test_data[f"price_{model}"] - test_data["mid_price_clean"]
-        test_data[f"abs_err_{model}"] = error.abs()
-        test_data[f"sq_err_{model}"] = error ** 2
-        test_data[f"within_{model}"] = (
-            (test_data[f"price_{model}"] >= test_data["bid_price"]) & (test_data[f"price_{model}"] <= test_data["ask_price"])
-        ).astype(int)
+    test_data = add_common_unit_errors(test_data)
     return black_params, heston_params, svcj_params, test_data
 
 
 def compute_overall_baseline_metrics(test_data: pd.DataFrame, output_dir: Path) -> pd.DataFrame:
-    rows = []
-    for currency, frame in [("BTC", test_data.query("currency == 'BTC'")), ("ETH", test_data.query("currency == 'ETH'")), ("Pooled", test_data)]:
-        row = {"currency": currency, "n_test_options": int(len(frame))}
+    """Build asset-level coin metrics and unit-coherent pooled metrics.
+
+    Asset rows report coin-unit errors as well as USD-equivalent and spread-unit
+    errors. The pooled BTC+ETH row intentionally leaves raw coin RMSE/MAE blank
+    because BTC and ETH are different economic units.
+    """
+    data = add_common_unit_errors(test_data)
+    rows: list[dict[str, object]] = []
+    scopes = [
+        ("BTC", data.loc[data["currency"] == "BTC"]),
+        ("ETH", data.loc[data["currency"] == "ETH"]),
+        ("Pooled", data),
+    ]
+    for scope, frame in scopes:
+        row: dict[str, object] = {"scope": scope, "n_test_options": int(len(frame))}
         for model in ["black", "heston", "svcj"]:
-            row[f"rmse_{model}"] = float(np.sqrt(frame[f"sq_err_{model}"].mean()))
-            row[f"mae_{model}"] = float(frame[f"abs_err_{model}"].mean())
-            row[f"within_{model}"] = float(frame[f"within_{model}"].mean())
+            coin_col = f"error_coin_{model}"
+            usd_col = f"error_usd_{model}"
+            spread_col = f"error_spread_units_{model}"
+
+            if scope != "Pooled":
+                row[f"rmse_coin_{model}"] = option_weighted_rmse(frame[coin_col])
+                row[f"mae_coin_{model}"] = option_weighted_mae(frame[coin_col])
+                row[f"snapshot_mean_rmse_coin_{model}"] = mean_snapshot_rmse(frame, error_col=coin_col)
+            else:
+                row[f"rmse_coin_{model}"] = np.nan
+                row[f"mae_coin_{model}"] = np.nan
+                row[f"snapshot_mean_rmse_coin_{model}"] = np.nan
+
+            row[f"rmse_usd_{model}"] = option_weighted_rmse(frame[usd_col])
+            row[f"mae_usd_{model}"] = option_weighted_mae(frame[usd_col])
+            row[f"snapshot_mean_rmse_usd_{model}"] = mean_snapshot_rmse(frame, error_col=usd_col)
+            row[f"rmse_spread_units_{model}"] = option_weighted_rmse(frame[spread_col])
+            row[f"mae_spread_units_{model}"] = option_weighted_mae(frame[spread_col])
+            row[f"snapshot_mean_rmse_spread_units_{model}"] = mean_snapshot_rmse(frame, error_col=spread_col)
+            row[f"within_spread_{model}"] = float(pd.to_numeric(frame[f"within_spread_{model}"], errors="coerce").mean())
         rows.append(row)
+
     out = pd.DataFrame(rows)
+    output_dir.mkdir(parents=True, exist_ok=True)
     out.to_csv(output_dir / "baseline_overall_metrics.csv", index=False)
     return out
-
 
 def compute_snapshot_metrics(test_data: pd.DataFrame, output_dir: Path) -> pd.DataFrame:
     rows = []

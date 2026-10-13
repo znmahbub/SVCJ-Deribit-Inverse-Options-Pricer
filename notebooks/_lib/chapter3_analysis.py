@@ -42,6 +42,12 @@ HOLDOUT_INFERENCE_LABEL = (
     "snapshot-level cross-sectional holdout loss differential with HAC standard errors"
 )
 
+PRICING_ERROR_UNIT_NOTE = (
+    "Snapshot RMSE/MAE in this module are coin-denominated and therefore interpreted "
+    "within currency. Cross-asset pooled headline metrics must use the common-unit "
+    "helpers in chapter3_final (USD-equivalent or spread units)."
+)
+
 # Small positive floor used to avoid division-by-zero in relative metrics
 # (within-spread rate, sMAPE, Feller ratio).
 EPS = 1e-12
@@ -226,6 +232,8 @@ def compute_snapshot_metrics_from_quotes(df_quotes: pd.DataFrame, split_name: st
             mean_price=("mid_price_clean", "mean"),
         )
         agg["rmse"] = np.sqrt(agg["mse"])
+        agg["rmse_coin"] = agg["rmse"]
+        agg["mae_coin"] = agg["mae"]
         agg["rmse_over_mean_price"] = agg["rmse"] / (agg["mean_price"].abs() + EPS)
         agg["model"] = model_key
         agg["split"] = split_name
