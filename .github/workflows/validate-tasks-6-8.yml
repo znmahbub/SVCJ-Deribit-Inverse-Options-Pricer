@@ -63,10 +63,15 @@ jobs:
             tests.test_sanity_pricing \
             tests.test_snapshot_splitting \
             tests.test_svcj_admissibility -v
-      - name: Save patch
+      - name: Export validated changes
         run: |
           git diff --binary > tasks-6-8.patch
+          git diff --name-only -z | tar --null -T - -czf tasks-6-8-files.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: tasks-6-8-patch
           path: tasks-6-8.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasks-6-8-files
+          path: tasks-6-8-files.tar.gz
