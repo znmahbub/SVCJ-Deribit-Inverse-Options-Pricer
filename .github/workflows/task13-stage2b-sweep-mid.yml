@@ -28,6 +28,7 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       NUMEXPR_NUM_THREADS: '1'
     steps:
+      # This gate lets the workflow exist ahead of time without violating staged execution.
       - name: Wait for low-lambda gate
         shell: bash
         run: |
