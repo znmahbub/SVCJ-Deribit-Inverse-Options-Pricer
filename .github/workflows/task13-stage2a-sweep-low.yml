@@ -5,6 +5,7 @@ on:
     branches: [task13-staged-rerun]
     paths:
       - .github/workflows/task13-stage2a-sweep-low.yml
+      - scripts/task13_candidate.py
 
 jobs:
   calibrate:
