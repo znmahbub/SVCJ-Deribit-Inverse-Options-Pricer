@@ -59,6 +59,16 @@ PARAM_COLS_COMMON = [
     "n_train",
     "n_test",
     "random_seed",
+    "regularization_active",
+    "l2_prev_strength",
+    "feller_penalty_active",
+    "feller_gap",
+    "feller_violated",
+    "svcj_moment_penalty_active",
+    "svcj_martingale_margin",
+    "svcj_martingale_violated",
+    "svcj_contour_margin",
+    "svcj_contour_violated",
 ]
 
 PARAM_COLS_BLACK = PARAM_COLS_COMMON + ["sigma"]

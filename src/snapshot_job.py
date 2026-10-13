@@ -153,6 +153,7 @@ def process_snapshot_to_payload(
         n_train: int,
         n_test: int,
         params: Optional[dict[str, float]],
+        diagnostics: Optional[dict[str, Any]] = None,
     ) -> pd.DataFrame:
         base = dict(
             timestamp=ts_iso,
@@ -170,9 +171,20 @@ def process_snapshot_to_payload(
             n_train=int(n_train),
             n_test=int(n_test),
             random_seed=int(random_seed),
+            regularization_active=False,
+            l2_prev_strength=float(l2_prev_strength),
+            feller_penalty_active=False,
+            feller_gap=np.nan,
+            feller_violated=False,
+            svcj_moment_penalty_active=False,
+            svcj_martingale_margin=np.nan,
+            svcj_martingale_violated=False,
+            svcj_contour_margin=np.nan,
+            svcj_contour_violated=False,
         )
         params = params or {}
         base.update(params)
+        base.update(diagnostics or {})
         return pd.DataFrame([base])
 
     # NaN-filled parameter dicts used when a model fails or is skipped.
@@ -433,10 +445,26 @@ def process_snapshot_to_payload(
                 params=_NAN_PARAMS[model], **common,
             )
         # CalibrationResult dataclass — normal success or optimizer failure.
+        diag_fields = {
+            name: getattr(result, name)
+            for name in (
+                "regularization_active",
+                "l2_prev_strength",
+                "feller_penalty_active",
+                "feller_gap",
+                "feller_violated",
+                "svcj_moment_penalty_active",
+                "svcj_martingale_margin",
+                "svcj_martingale_violated",
+                "svcj_contour_margin",
+                "svcj_contour_violated",
+            )
+            if hasattr(result, name)
+        }
         return _make_param_row(
             model, success=bool(result.success), message=result.message, nfev=result.nfev,
             rmse_fit=result.rmse, mae_fit=result.mae,
-            params=dict(result.params), **common,
+            params=dict(result.params), diagnostics=diag_fields, **common,
         )
 
     black_row  = _build_result_param_row("black")

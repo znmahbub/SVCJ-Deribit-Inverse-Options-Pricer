@@ -315,3 +315,20 @@ first moment and, on the actual Carr-Madan contour `u=v-i(alpha+1)`,
 endpoint is checked explicitly. `SVCJAdmissibilityError` is propagated by the
 pricer and converted to a controlled calibration penalty rather than being
 silently treated as a finite price.
+
+
+### Calibration objective semantics
+
+`WeightConfig` controls residual *scales*, not final least-squares weights. The
+optimizer receives `r_i = s_i (P_model_i-P_market_i)`; therefore the objective
+contains `s_i^2 error_i^2`. With the baseline spread-only configuration and
+`spread_power=1`, `s_i=1/(spread_i+eps)` and the squared objective is
+inverse-spread-squared. Temporal regularization is appended in transformed
+parameter coordinates as `sqrt(lambda_TS) (x_t-x_{t-1})`, where `x` is the
+packed calibration vector.
+
+The Feller condition is a soft finite residual, not a hard feasibility bound.
+Calibration results and workbook parameter rows persist whether regularization
+was active, the Feller gap/violation flag, and SVCJ martingale/shifted-contour
+moment margins and violation flags. These generated fields are the canonical
+inputs for later parameter-stability diagnostics.
