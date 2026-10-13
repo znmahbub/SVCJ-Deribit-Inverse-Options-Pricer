@@ -4,7 +4,12 @@ import gc
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 
@@ -55,7 +60,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     reg = int(os.environ["REG"])
-    root = Path.cwd().resolve()
+    root = ROOT
     work_dir = root / "_task13" / f"reg_{reg}"
     export_dir = work_dir / "candidate_export"
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -139,7 +144,6 @@ def main() -> None:
     selection_only = svcj[SELECTION_COLUMNS].copy()
     selection_only.to_csv(export_dir / f"svcj_params_reg_{reg}.csv", index=False)
 
-    # This helper reads only validation metrics plus stability/admissibility columns.
     summary = compute_regularisation_summary(
         [workbook_path],
         export_dir,
