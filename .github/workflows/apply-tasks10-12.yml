@@ -1,0 +1,130 @@
+name: apply-tasks10-12
+
+on:
+  push:
+    branches: [paper-code-remediation]
+    paths:
+      - .github/workflows/apply-tasks10-12.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tqdm nbformat plotly
+
+      - name: Task 10 RED — unit-coherent metric API does not exist yet
+        shell: bash
+        run: |
+          set +e
+          python -m unittest tests.test_chapter3_metrics -v
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "Task 10 unexpectedly passed before implementation"
+            exit 1
+          fi
+          echo "Task 10 RED confirmed"
+
+      - name: Task 11 RED — neutral proxy provenance is not implemented yet
+        shell: bash
+        run: |
+          set +e
+          python -m unittest tests.test_perp_price_provenance -v
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "Task 11 unexpectedly passed before implementation"
+            exit 1
+          fi
+          echo "Task 11 RED confirmed"
+
+      - name: Task 12 RED — verify original robustness test preceded helper implementation
+        shell: bash
+        run: |
+          tmpdir="$(mktemp -d)"
+          git worktree add --detach "$tmpdir/red12" 440b24eb4b97a7adfb6d914c2f05a4bcb2eae02b
+          set +e
+          (cd "$tmpdir/red12" && PYTHONPATH=. python -m unittest tests.test_robustness_helpers -v)
+          status=$?
+          set -e
+          git worktree remove --force "$tmpdir/red12"
+          if [ "$status" -eq 0 ]; then
+            echo "Task 12 unexpectedly passed at the tests-first commit"
+            exit 1
+          fi
+          echo "Task 12 RED confirmed at tests-first commit"
+
+      - name: Apply production changes
+        run: python scripts/apply_tasks10_12.py
+
+      - name: Task 10 GREEN
+        run: python -m unittest tests.test_chapter3_metrics -v
+      - name: Task 11 GREEN
+        run: python -m unittest tests.test_perp_price_provenance -v
+      - name: Task 12 GREEN
+        run: python -m unittest tests.test_robustness_helpers -v
+
+      - name: Related regression suite
+        run: |
+          python -m unittest \
+            tests.test_hedge_mapping \
+            tests.test_hedging_invariants \
+            tests.test_notebook_integrity \
+            tests.test_notebook_structure \
+            tests.test_sanity_pricing \
+            tests.test_svcj_admissibility -v
+
+      - name: Commit production changes by task
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add notebooks/_lib/chapter3_final.py notebooks/_lib/chapter3_analysis.py notebooks/calibration_results_final.ipynb
+          git commit -m "fix: make pricing metric aggregation unit consistent"
+
+          git add src/backfill_futures_marks.py src/hedging_analysis.py notebooks/_lib/futures_viewer.py README.md
+          git commit -m "fix: make perpetual hedge price provenance explicit"
+
+          git add notebooks/robustness_checks.ipynb docs/code_documentation.md
+          git commit -m "feat: add discounting and identification robustness"
+
+      - name: Verify after commits
+        run: |
+          python -m unittest \
+            tests.test_chapter3_metrics \
+            tests.test_perp_price_provenance \
+            tests.test_robustness_helpers \
+            tests.test_hedge_mapping \
+            tests.test_hedging_invariants \
+            tests.test_notebook_integrity \
+            tests.test_notebook_structure \
+            tests.test_sanity_pricing \
+            tests.test_svcj_admissibility -v
+
+      - name: Remove temporary implementation/verification machinery
+        shell: bash
+        run: |
+          git rm scripts/apply_tasks10_12.py
+          git rm .github/workflows/apply-tasks10-12.yml
+          if [ -f .github/workflows/tasks10-12-verification.yml ]; then
+            git rm .github/workflows/tasks10-12-verification.yml
+          fi
+          git commit -m "chore: remove tasks 10-12 temporary workflows"
+
+      - name: Push completed tasks
+        run: git push origin HEAD:paper-code-remediation
