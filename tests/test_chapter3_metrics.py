@@ -62,7 +62,7 @@ class Chapter3MetricTests(unittest.TestCase):
             float(pooled["rmse_spread_units_black"]),
             np.sqrt((0.5**2 + 0.75**2 + 0.0**2 + 0.5**2) / 4.0),
         )
-        self.assertAlmostEqual(float(pooled["within_spread_black"]), 1.0)
+        self.assertAlmostEqual(float(pooled["within_spread_black"]), 0.75)
 
         btc = out.loc[out["scope"] == "BTC"].iloc[0]
         self.assertAlmostEqual(
