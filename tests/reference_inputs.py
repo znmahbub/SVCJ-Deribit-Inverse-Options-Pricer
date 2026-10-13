@@ -38,6 +38,20 @@ def _center_b_for_strikes(*, N: int, eta: float, strikes: np.ndarray) -> float:
     return logK_center - 0.5 * float(N) * lam
 
 
+
+def svcj_reference_params(
+    heston_params: dict[str, float], *, rho_j: float = -0.30
+) -> dict[str, float]:
+    """Stable SVCJ regression parameters; rho_j is not a correlation bound."""
+    return {
+        **heston_params,
+        "lam": 0.20,
+        "ell_y": -0.05,
+        "sigma_y": 0.20,
+        "ell_v": 0.10,
+        "rho_j": float(rho_j),
+    }
+
 def build_reference_case() -> ReferenceCase:
     # --- Base scalar inputs
     F0 = 10_000.0
@@ -62,14 +76,7 @@ def build_reference_case() -> ReferenceCase:
         "v0": 0.04,
     }
 
-    svcj_params = {
-        **heston_params,
-        "lam": 0.20,
-        "ell_y": -0.05,
-        "sigma_y": 0.20,
-        "ell_v": 0.10,
-        "rho_j": -0.30,
-    }
+    svcj_params = svcj_reference_params(heston_params)
 
     # --- DataFrame case for vectorized pricing (2 expiries, mixed calls/puts)
     exp1 = "2026-06-01T00:00:00Z"

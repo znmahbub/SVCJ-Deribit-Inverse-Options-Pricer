@@ -32,6 +32,8 @@ from .inverse_fft_pricer import (
     center_fft_params_on_strikes,
     clear_fft_cache as _pricer_clear_fft_cache,
     price_inverse_option,
+    SVCJAdmissibilityError,
+    svcj_martingale_moment_ok,
 )
 
 
@@ -384,7 +386,7 @@ def _pack_svcj(params: Dict[str, float]) -> np.ndarray:
             float(params["ell_y"]),
             np.log(float(params["sigma_y"])),
             np.log(float(params["ell_v"])),
-            np.arctanh(np.clip(float(params["rho_j"]), -0.999, 0.999)),
+            float(params["rho_j"]),
         ],
         dtype=float,
     )
@@ -401,7 +403,7 @@ def _unpack_svcj(x: np.ndarray) -> Dict[str, float]:
         "ell_y": float(x[6]),
         "sigma_y": float(np.exp(x[7])),
         "ell_v": float(np.exp(x[8])),
-        "rho_j": float(np.tanh(x[9])),
+        "rho_j": float(x[9]),
     }
 
 
@@ -478,6 +480,8 @@ def _default_bounds(model: str) -> Tuple[np.ndarray, np.ndarray]:
             ],
             dtype=float,
         )
+        lb[-1] = -np.inf
+        ub[-1] = np.inf
         return lb, ub
 
     raise ValueError("model must be one of {'black','heston','svcj'}")
@@ -601,16 +605,56 @@ def calibrate_model(
             moment_violation = max(0.0, float(svcj_moment_eps) - moment)
             pen.append(float(constraint_penalty) * moment_violation)
 
+            # The Carr-Madan contour uses q=alpha+1.  At s=0, B=0, so this
+            # endpoint moment is a necessary admissibility condition and gives
+            # the optimizer a smooth penalty before any FFT is attempted.
+            contour_margins = [
+                1.0
+                - float(p["ell_v"])
+                * (float(group[-1].alpha) + 1.0)
+                * float(p["rho_j"])
+                for group in pricing_plan
+            ]
+            contour_margin = min(contour_margins) if contour_margins else float("inf")
+            contour_violation = max(0.0, float(svcj_moment_eps) - contour_margin)
+            pen.append(float(constraint_penalty) * contour_violation)
+
         if not pen:
             return np.empty(0, dtype=float)
 
         pen_arr = np.asarray(pen, dtype=float)
         return np.where(np.isfinite(pen_arr), pen_arr, float(constraint_penalty))
 
+    def _penalty_result(pen: np.ndarray, reg: np.ndarray) -> np.ndarray:
+        r = penalty_coin * w
+        r = np.where(np.isfinite(r), r, penalty_coin)
+        if pen.size:
+            r = np.concatenate([r, pen])
+        return np.concatenate([r, reg]) if reg_dim > 0 else r
+
+    def _svcj_endpoint_admissible(p: Dict[str, float]) -> bool:
+        if model_l != "svcj":
+            return True
+        if not svcj_martingale_moment_ok(
+            float(p["ell_v"]), float(p["rho_j"]), float(svcj_moment_eps)
+        ):
+            return False
+        for group in pricing_plan:
+            q = float(group[-1].alpha) + 1.0
+            if (
+                1.0 - float(p["ell_v"]) * q * float(p["rho_j"])
+                <= float(svcj_moment_eps)
+            ):
+                return False
+        return True
+
     def residuals(x: np.ndarray) -> np.ndarray:
         p = unpack(x)
         pen = _constraint_residuals(p)
         reg = reg_scale * (x - reg_anchor_x) if reg_dim > 0 else np.empty(0, dtype=float)
+
+        if not _svcj_endpoint_admissible(p):
+            return _penalty_result(pen, reg)
 
         try:
             _price_with_plan(
@@ -620,12 +664,10 @@ def calibrate_model(
                 out_prices=y_model_buf,
                 use_cache=use_cache_in_optimization,
             )
+        except SVCJAdmissibilityError:
+            return _penalty_result(pen, reg)
         except Exception:
-            r = penalty_coin * w
-            r = np.where(np.isfinite(r), r, penalty_coin)
-            if pen.size:
-                r = np.concatenate([r, pen])
-            return np.concatenate([r, reg]) if reg_dim > 0 else r
+            return _penalty_result(pen, reg)
 
         # r_buf = w * (y_model - y_mkt), computed in-place WITHOUT augmented assignment on r_buf
         np.subtract(y_model_buf, y_mkt, out=r_buf)
@@ -651,7 +693,10 @@ def calibrate_model(
 
     params_hat = unpack(res.x)
 
-    _price_with_plan(pricing_plan, model=model_l, params=params_hat, out_prices=y_model_buf, use_cache=True)
+    try:
+        _price_with_plan(pricing_plan, model=model_l, params=params_hat, out_prices=y_model_buf, use_cache=True)
+    except SVCJAdmissibilityError:
+        y_model_buf[:] = np.nan
     y_hat = y_model_buf
 
     if not np.all(np.isfinite(y_hat)):

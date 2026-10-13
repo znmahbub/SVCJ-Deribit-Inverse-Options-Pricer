@@ -121,6 +121,130 @@ def center_fft_params_on_strikes(base: FFTParams, strikes: np.ndarray) -> FFTPar
     b = logK_center - 0.5 * N * lam
     return FFTParams(N=base.N, alpha=base.alpha, eta=base.eta, b=b, use_simpson=base.use_simpson)
 
+
+class SVCJAdmissibilityError(ValueError):
+    """Raised when the SVCJ joint-jump transform leaves its moment domain."""
+
+
+def svcj_martingale_moment_ok(ell_v: float, rho_j: float, eps: float = 1e-12) -> bool:
+    """Check the first exponential moment used by the martingale drift."""
+    values = np.asarray([ell_v, rho_j, eps], dtype=float)
+    if not np.all(np.isfinite(values)) or ell_v <= 0.0 or eps < 0.0:
+        return False
+    return bool(1.0 - float(ell_v) * float(rho_j) > float(eps))
+
+
+def _svcj_B_path(
+    u: np.ndarray,
+    s: np.ndarray,
+    *,
+    kappa: float,
+    sigma_v: float,
+    rho: float,
+) -> np.ndarray:
+    """Heston Riccati B(s;u) on a time/frequency grid."""
+    u = np.atleast_1d(np.asarray(u, dtype=np.complex128))
+    s = np.atleast_1d(np.asarray(s, dtype=float))
+    iu = 1j * u
+    d = np.sqrt((kappa - rho * sigma_v * iu) ** 2 + sigma_v ** 2 * (u ** 2 + iu))
+    d = np.where(np.real(d) < 0.0, -d, d)
+    g = (kappa - rho * sigma_v * iu - d) / (kappa - rho * sigma_v * iu + d)
+    d_mat = d[np.newaxis, :]
+    g_mat = g[np.newaxis, :]
+    exp_ds = np.exp(-d_mat * s[:, np.newaxis])
+    return (
+        ((kappa - rho * sigma_v * iu)[np.newaxis, :] - d_mat)
+        / (sigma_v ** 2)
+        * (1.0 - exp_ds)
+        / (1.0 - g_mat * exp_ds)
+    )
+
+
+def _svcj_jump_domain_ok(
+    u: np.ndarray,
+    s: np.ndarray,
+    *,
+    kappa: float,
+    sigma_v: float,
+    rho: float,
+    ell_v: float,
+    rho_j: float,
+    eps: float,
+) -> bool:
+    """Check Re(B+i*u*rho_j) < 1/ell_v, including the s=0 endpoint."""
+    if (
+        not np.isfinite(ell_v)
+        or ell_v <= 0.0
+        or not np.isfinite(rho_j)
+        or not np.isfinite(eps)
+        or eps < 0.0
+    ):
+        return False
+    u = np.atleast_1d(np.asarray(u, dtype=np.complex128))
+    iu = 1j * u
+    endpoint_margin = 1.0 - ell_v * np.real(iu * rho_j)
+    if np.any(~np.isfinite(endpoint_margin)) or np.any(endpoint_margin <= eps):
+        return False
+    B_s = _svcj_B_path(u, s, kappa=kappa, sigma_v=sigma_v, rho=rho)
+    margin = 1.0 - ell_v * np.real(B_s + iu[np.newaxis, :] * rho_j)
+    return bool(np.all(np.isfinite(margin)) and np.all(margin > eps))
+
+
+def svcj_carr_madan_admissible(
+    *,
+    kappa: float,
+    sigma_v: float,
+    rho: float,
+    ell_v: float,
+    rho_j: float,
+    alpha: float,
+    T: float,
+    N: int = 2 ** 12,
+    eta: float = 0.1,
+    quad_nodes: int = 32,
+    eps: float = 1e-12,
+) -> bool:
+    """Check the joint-jump moment domain on u=v-i(alpha+1).
+
+    For the exponential variance jump the transform exists only if
+    Re(B(s;u)+i*u*rho_j) < 1/ell_v for every integration time.  The s=0
+    endpoint is checked explicitly because Gauss-Legendre nodes exclude it.
+    """
+    values = np.asarray(
+        [kappa, sigma_v, rho, ell_v, rho_j, alpha, T, eta, eps], dtype=float
+    )
+    if (
+        not np.all(np.isfinite(values))
+        or kappa <= 0.0
+        or sigma_v <= 0.0
+        or ell_v <= 0.0
+        or alpha <= 0.0
+        or T < 0.0
+        or eta <= 0.0
+        or int(N) < 1
+        or int(quad_nodes) < 1
+        or eps < 0.0
+    ):
+        return False
+    q = float(alpha) + 1.0
+    if 1.0 - float(ell_v) * q * float(rho_j) <= float(eps):
+        return False
+    v = np.arange(int(N), dtype=float) * float(eta)
+    u = v - 1j * q
+    nodes, _ = _leggauss_cached(int(quad_nodes))
+    s = 0.5 * float(T) * (nodes + 1.0)
+    return _svcj_jump_domain_ok(
+        u,
+        s,
+        kappa=float(kappa),
+        sigma_v=float(sigma_v),
+        rho=float(rho),
+        ell_v=float(ell_v),
+        rho_j=float(rho_j),
+        eps=float(eps),
+    )
+
+
 ###############################################################################
 # Characteristic functions for the models
 ###############################################################################
@@ -280,12 +404,13 @@ def cf_svcj(
     scalar_input = (u_arr.ndim == 0)
     u = np.atleast_1d(u_arr)
 
-    # Basic parameter domain checks (avoid singularities in jump MGF)
-    if ell_v <= 0:
-        raise ValueError("SVCJ requires ell_v > 0 (mean of variance jump size exponential distribution).")
-    if 1.0 - ell_v * rho_j <= 0:
-        raise ValueError(
-            "SVCJ requires 1 - ell_v * rho_j > 0 so that E[e^{rho_j Z}] is finite (martingale drift adjustment)."
+    # rho_j is an unbounded conditional jump-size loading. Its domain is
+    # determined by exponential-moment existence, not correlation bounds.
+    if ell_v <= 0.0:
+        raise SVCJAdmissibilityError("SVCJ requires ell_v > 0.")
+    if not svcj_martingale_moment_ok(ell_v, rho_j, 1e-12):
+        raise SVCJAdmissibilityError(
+            "SVCJ requires 1 - ell_v*rho_j > 0 for the martingale jump moment."
         )
     iu = 1j * u
     # Heston-like discriminant d(u) and g(u)
@@ -328,18 +453,25 @@ def cf_svcj(
     # NOTE: the return jump mean depends linearly on the variance jump size.
     # With Z ~ Exp(mean=ell_v) and Y|Z ~ N(ell_y + rho_j*Z, sigma_y^2), we have
     # E[exp(iu Y + B Z)] = exp(iu*ell_y - 0.5*sigma_y^2*u^2) / (1 - ell_v*(B + iu*rho_j)).
-    denom = 1.0 - ell_v * (B_s + iu[np.newaxis, :] * rho_j)
-    # If the jump MGF denominator gets too close to zero, pricing becomes unstable.
-    if (not np.all(np.isfinite(denom))) or np.min(np.abs(denom)) < 1e-12:
-        warnings.warn(
-            "cf_svcj: jump MGF denominator is near-zero or non-finite "
-            "(1 − ell_v*(B(s;u) + i*u*rho_j) ≈ 0). "
-            "Check ell_v and rho_j values. Returning NaN.",
-            RuntimeWarning,
-            stacklevel=2,
+    jump_exponent = B_s + iu[np.newaxis, :] * rho_j
+    # Existence of E[exp((B+i*u*rho_j) Z)] for exponential Z is a real-domain
+    # condition, not merely a nonzero-complex-denominator condition.
+    endpoint_margin = 1.0 - ell_v * np.real(iu * rho_j)
+    domain_margin = 1.0 - ell_v * np.real(jump_exponent)
+    if (
+        np.any(~np.isfinite(endpoint_margin))
+        or np.any(endpoint_margin <= 1e-12)
+        or np.any(~np.isfinite(domain_margin))
+        or np.any(domain_margin <= 1e-12)
+    ):
+        raise SVCJAdmissibilityError(
+            "SVCJ joint-jump transform leaves its exponential-moment domain."
         )
-        phi = np.full_like(u, np.nan, dtype=np.complex128)
-        return phi[0] if scalar_input else phi
+    denom = 1.0 - ell_v * jump_exponent
+    if (not np.all(np.isfinite(denom))) or np.min(np.abs(denom)) < 1e-12:
+        raise SVCJAdmissibilityError(
+            "SVCJ jump MGF denominator is singular or non-finite."
+        )
     num = np.exp(iu * ell_y - 0.5 * (sigma_y * sigma_y) * (u ** 2))
     M = num[np.newaxis, :] / denom
     # Integrand: M(u,B(s)) - 1 - i*u*κF
@@ -651,6 +783,10 @@ def price_inverse_option(
     # Compute or fetch pricing grid
     try:
         K_grid, C_grid = _get_pricing_grid(model_lower, cf_func, T, F0, param_tuple, fft_params, use_cache=use_cache)
+    except SVCJAdmissibilityError:
+        # Domain-invalid SVCJ candidates are explicit model failures;
+        # calibration converts this exception to a controlled penalty.
+        raise
     except Exception:
         K_arr = np.asarray(K, dtype=float)
         nan_out = np.full_like(K_arr, np.nan, dtype=float)

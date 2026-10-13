@@ -392,5 +392,38 @@ class TestSanityPricing(unittest.TestCase):
                                  f"Call price should be weakly decreasing in K: {prices}")
 
 
+    def test_svcj_negative_jump_loading_outside_unit_interval_prices_finitely(self) -> None:
+        """rho_j is a loading, so a stable value below -1 remains admissible."""
+        F0 = 10_000.0
+        T = 0.25
+        K = np.array([8_000.0, 10_000.0, 12_000.0])
+        params = {
+            "kappa": 2.0,
+            "theta": 0.04,
+            "sigma_v": 0.30,
+            "rho": -0.50,
+            "v0": 0.04,
+            "lam": 0.20,
+            "ell_y": -0.05,
+            "sigma_y": 0.20,
+            "ell_v": 0.10,
+            "rho_j": -2.0,
+        }
+        N, eta = 2 ** 10, 0.10
+        lam_grid = 2.0 * np.pi / (N * eta)
+        b = float(np.log(np.median(K))) - 0.5 * N * lam_grid
+        fftp = FFTParams(N=N, alpha=1.5, eta=eta, b=b, use_simpson=True)
+        price = price_inverse_option(
+            "svcj",
+            K=K,
+            T=T,
+            F0=F0,
+            params=params,
+            option_type="call",
+            fft_params=fftp,
+            use_cache=False,
+        )
+        self.assertTrue(np.all(np.isfinite(price)))
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

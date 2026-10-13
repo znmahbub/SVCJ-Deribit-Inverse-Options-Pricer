@@ -302,3 +302,16 @@ a short one-option position and the baseline local assumption
 only in `Delta_used`, not in an additional basis approximation. The interval
 panel persists `F_term`, `H_perp`, `basis_ratio`, `dF_dH_assumption`, and the
 notional scale used.
+
+
+### SVCJ jump loading and FFT admissibility
+
+`rho_j` is the conditional return-jump loading on the exponential variance
+jump, not a correlation coefficient. Calibration stores it directly in
+transformed parameter space and does not apply a `tanh`/`[-1,1]` bound.
+Admissibility is enforced through moments: `1-ell_v*rho_j>0` for the martingale
+first moment and, on the actual Carr-Madan contour `u=v-i(alpha+1)`,
+`Re(B(s;u)+i*u*rho_j) < 1/ell_v` for every jump-integration time. The `s=0`
+endpoint is checked explicitly. `SVCJAdmissibilityError` is propagated by the
+pricer and converted to a controlled calibration penalty rather than being
+silently treated as a finite price.
