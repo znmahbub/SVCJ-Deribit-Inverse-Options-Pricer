@@ -332,3 +332,15 @@ Calibration results and workbook parameter rows persist whether regularization
 was active, the Feller gap/violation flag, and SVCJ martingale/shifted-contour
 moment margins and violation flags. These generated fields are the canonical
 inputs for later parameter-stability diagnostics.
+
+
+### Sequential temporal regularization
+
+A positive `BatchConfig.l2_prev_strength` creates a chronological dependency
+within each currency. `run_currency_to_excel(...)` therefore forces one worker
+for that currency whenever temporal regularization is active, regardless of the
+requested `n_workers`. After a successful snapshot, its calibrated parameters
+become the warm start and transformed-space L2 anchor for the next snapshot.
+Resume reconstructs the anchor from the latest successful parameter row before
+the first pending timestamp. Parallel chunk processing remains available only
+when `l2_prev_strength == 0`.

@@ -6,7 +6,8 @@ This module orchestrates:
 
 - enumerating snapshot CSV files
 - optional resume-from-Excel
-- multithreaded processing with warm-start
+- chronological warm-start processing for temporally regularized runs
+- optional multithreaded processing for unregularized runs
 - ordered (timestamp) committing to the workbook
 - periodic, atomic flushing to disk
 
@@ -287,10 +288,15 @@ def run_currency_to_excel(
             print(f"[{currency}] Nothing to do (resume found up-to-date workbook).")
         return workbook
 
-    n_workers = max(1, min(int(cfg.n_workers), len(pending)))
+    requested_workers = max(1, min(int(cfg.n_workers), len(pending)))
+    # Temporal L2 regularization creates a true dependency chain: snapshot t+1
+    # must receive the successful parameters from t. Chunk-level warm starts are
+    # not sufficient because independent chunks break that chain.
+    n_workers = 1 if float(cfg.l2_prev_strength) > 0.0 else requested_workers
 
     if cfg.verbose:
-        print(f"[{currency}] Processing {len(pending)} snapshots using {n_workers} workers")
+        suffix = " (forced sequential by temporal regularization)" if n_workers == 1 and requested_workers > 1 and float(cfg.l2_prev_strength) > 0.0 else ""
+        print(f"[{currency}] Processing {len(pending)} snapshots using {n_workers} workers{suffix}")
 
     out_q: queue.Queue = queue.Queue()
 
