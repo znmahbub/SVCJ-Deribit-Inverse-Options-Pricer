@@ -9,6 +9,7 @@ from tests._path import ROOT  # noqa: F401
 from notebooks._lib.robustness import (
     DEFAULT_SCENARIO_RATES,
     apply_discounting_to_inverse_price,
+    assess_discounting_promotion,
     build_discounting_sensitivity_table,
     discount_factor,
     parameter_correlation_matrix,
@@ -54,6 +55,21 @@ class RobustnessHelperTests(unittest.TestCase):
         baseline = table.loc[(table["rate"] == 0.0) & (table["model"] == "black")].iloc[0]
         self.assertAlmostEqual(float(baseline["rmse_coin"]), np.sqrt((0.01**2 + 0.01**2) / 2.0))
         self.assertAlmostEqual(float(baseline["mean_abs_price_shift_coin"]), 0.0)
+
+    def test_discounting_promotion_must_be_decided_within_currency(self) -> None:
+        table = pd.DataFrame(
+            [
+                {"scope": scope, "model": model, "rate": rate, "rmse_coin": rmse, "within_spread_share": within}
+                for scope in ("BTC", "ETH", "All")
+                for rate, rmse, within in ((0.0, 1.0, 0.5), (0.05, 1.01, 0.5))
+                for model in ("black", "heston", "svcj")
+            ]
+        )
+        with self.assertRaisesRegex(ValueError, "cross-asset"):
+            assess_discounting_promotion(table, scope="All")
+        decision = assess_discounting_promotion(table, scope="BTC")
+        self.assertEqual(decision["scope"], "BTC")
+        self.assertFalse(bool(decision["promote_discounting_to_baseline"]))
 
     def test_identification_summary_treats_rho_j_as_unbounded_loading(self) -> None:
         params = pd.DataFrame(
