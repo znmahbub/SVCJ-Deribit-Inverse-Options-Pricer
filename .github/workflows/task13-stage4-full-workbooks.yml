@@ -1,5 +1,5 @@
-# Task 13 post-lock Stage 4
-name: task13-stage4-full-workbooks
+# Task 13 post-lock Stage 5: untouched-test pricing and robustness gate
+name: task13-stage5-test-robustness
 
 on:
   push:
@@ -10,57 +10,109 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  regenerate:
-    strategy:
-      fail-fast: false
-      matrix:
-        reg: [0, 1]
+  test-and-robustness:
     runs-on: ubuntu-24.04
-    timeout-minutes: 330
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
           ref: task13-staged-rerun
-      - name: Verify Stage 3 lock
-        shell: bash
+      - name: Verify locked selection
         run: |
           grep -q '^- Status: LOCKED$' docs/reproducibility/regularization_selection.md
           grep -q '^- Selected lambda_TS: 1$' docs/reproducibility/regularization_selection.md
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install calibration dependencies
+      - name: Install reporting dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install plotly
-      - name: Regenerate complete corrected workbook
-        env:
-          REG: ${{ matrix.reg }}
-        run: python scripts/task13_candidate.py
-      - name: Verify workbook structure
-        env:
-          REG: ${{ matrix.reg }}
+          pip install plotly nbconvert nbclient jupyter
+      - name: Download corrected lambda 0 workbook
+        uses: actions/download-artifact@v4
+        with:
+          name: task13-full-workbook-reg-0
+          path: excel files/remediation
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38540630247
+      - name: Download corrected locked workbook
+        uses: actions/download-artifact@v4
+        with:
+          name: task13-full-workbook-reg-1
+          path: excel files/remediation
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38540630247
+      - name: Verify corrected inputs
         run: |
+          ls -lh 'excel files/remediation/'
+          test -f 'excel files/remediation/calibration_results_reg_0.xlsx'
+          test -f 'excel files/remediation/calibration_results_reg_1.xlsx'
+      - name: Run untouched-test final pricing notebook
+        run: |
+          jupyter nbconvert --to notebook --execute notebooks/calibration_results_final.ipynb \
+            --output calibration_results_final.executed.ipynb \
+            --output-dir _task13/stage5 \
+            --ExecutePreprocessor.timeout=3600
+      - name: Run Task 12 robustness and discounting gate
+        run: |
+          mkdir -p _task13/stage5/robustness
           python - <<'PY'
-          import os
+          import json, sys
           from pathlib import Path
           import pandas as pd
-          reg = os.environ['REG']
-          p = Path('_task13') / f'reg_{reg}' / f'calibration_results_reg_{reg}.xlsx'
-          x = pd.ExcelFile(p)
-          required = {'black_params','heston_params','svcj_params','train_data','validation_data','test_data'}
-          missing = required - set(x.sheet_names)
-          if missing:
-              raise SystemExit(f'missing sheets: {sorted(missing)}')
-          print(p, p.stat().st_size, x.sheet_names)
+          sys.path.insert(0, str(Path('notebooks').resolve()))
+          from _lib import chapter3_final, robustness
+
+          root = Path('excel files/remediation')
+          out = Path('_task13/stage5/robustness')
+          all_discount, all_decisions, all_ident = [], [], []
+          for reg in (0, 1):
+              path = root / f'calibration_results_reg_{reg}.xlsx'
+              _, _, svcj, test = chapter3_final.load_baseline_workbook(path, evaluation_split='test')
+              disc = robustness.build_discounting_sensitivity_table(test)
+              disc['lambda_TS'] = reg
+              all_discount.append(disc)
+              ident = robustness.parameter_identification_summary(svcj)
+              ident['lambda_TS'] = reg
+              all_ident.append(ident)
+              for currency in ('BTC', 'ETH'):
+                  decision = robustness.assess_discounting_promotion(disc, scope=currency)
+                  decision['lambda_TS'] = reg
+                  all_decisions.append(decision)
+                  robustness.parameter_correlation_matrix(svcj, currency=currency).to_csv(
+                      out / f'svcj_parameter_correlations_reg_{reg}_{currency}.csv'
+                  )
+          sensitivity = pd.concat(all_discount, ignore_index=True)
+          decisions = pd.DataFrame(all_decisions)
+          identification = pd.concat(all_ident, ignore_index=True)
+          sensitivity.to_csv(out / 'discounting_sensitivity.csv', index=False)
+          decisions.to_csv(out / 'discounting_promotion_decisions.csv', index=False)
+          identification.to_csv(out / 'svcj_identification_summary.csv', index=False)
+          print(decisions.to_string(index=False))
+          # Gate the selected baseline only. lambda=0 is retained as a diagnostic comparator.
+          selected = decisions.loc[decisions['lambda_TS'] == 1]
+          gate = {
+              'selected_lambda_TS': 1,
+              'promotion_required': bool(selected['promote_discounting_to_baseline'].any()),
+              'decisions': selected.to_dict(orient='records'),
+          }
+          (out / 'discounting_gate.json').write_text(json.dumps(gate, indent=2, default=str), encoding='utf-8')
+          if gate['promotion_required']:
+              raise SystemExit('DISCOUNTING_PROMOTION_REQUIRED: stop before hedging')
           PY
-      - name: Upload full corrected workbook
+      - name: Upload Stage 5 evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: task13-full-workbook-reg-${{ matrix.reg }}
-          path: _task13/reg_${{ matrix.reg }}/calibration_results_reg_${{ matrix.reg }}.xlsx
-          if-no-files-found: error
+          name: task13-stage5-test-robustness
+          path: |
+            _task13/stage5/
+            notebooks/chapter3_outputs/remediation/final/
+          if-no-files-found: warn
           retention-days: 30
