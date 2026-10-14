@@ -117,6 +117,11 @@ jobs:
           PY
           git add docs/reproducibility/regularization_selection.md
           git commit -m "results: lock validation-selected temporal regularization"
+          # The branch may advance while this job is running (for example, when a
+          # prior calibration rerun uploads its recovery commit). Rebase our two
+          # deterministic result commits onto the current tip rather than forcing.
+          git fetch origin task13-staged-rerun
+          git rebase origin/task13-staged-rerun
           git push origin HEAD:task13-staged-rerun
       - name: Upload selection evidence
         uses: actions/upload-artifact@v4
