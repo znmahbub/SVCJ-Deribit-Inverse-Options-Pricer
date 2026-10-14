@@ -1,12 +1,12 @@
 # Regularization selection record
 
-- Status: PENDING
-- Selected lambda_TS: TBD
+- Status: LOCKED
+- Selected lambda_TS: 1
 - Candidate grid: 0, 1, 3, 5, 10, 25, 50, 100, 250, 500, 1000
 - Evaluation split: validation
 - Primary selection statistic: mean SVCJ snapshot-level `rmse_validation`
 - Deterministic tie-break order: `mae_validation`, parameter-path roughness, mean `nfev`, smaller `lambda_TS`
-- Selection commit: TBD
+- Selection commit: 21fee82d4d98ea79e3fd467c7355a98374273c88
 
 ## Protocol
 
