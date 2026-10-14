@@ -1,0 +1,64 @@
+name: task13-stage4-full-workbooks
+
+on:
+  push:
+    branches: [task13-staged-rerun]
+    paths:
+      - '.github/workflows/task13-stage4-full-workbooks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    strategy:
+      fail-fast: false
+      matrix:
+        reg: [0, 1]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task13-staged-rerun
+      - name: Verify Stage 3 lock
+        shell: bash
+        run: |
+          grep -q '^- Status: LOCKED$' docs/reproducibility/regularization_selection.md
+          grep -q '^- Selected lambda_TS: 1$' docs/reproducibility/regularization_selection.md
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install calibration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Regenerate complete corrected workbook
+        env:
+          REG: ${{ matrix.reg }}
+        run: python scripts/task13_candidate.py
+      - name: Verify workbook structure
+        env:
+          REG: ${{ matrix.reg }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import pandas as pd
+          reg = os.environ['REG']
+          p = Path('_task13') / f'reg_{reg}' / f'calibration_results_reg_{reg}.xlsx'
+          x = pd.ExcelFile(p)
+          required = {'black_params','heston_params','svcj_params','train_data','validation_data','test_data'}
+          missing = required - set(x.sheet_names)
+          if missing:
+              raise SystemExit(f'missing sheets: {sorted(missing)}')
+          print(p, p.stat().st_size, x.sheet_names)
+          PY
+      - name: Upload full corrected workbook
+        uses: actions/upload-artifact@v4
+        with:
+          name: task13-full-workbook-reg-${{ matrix.reg }}
+          path: _task13/reg_${{ matrix.reg }}/calibration_results_reg_${{ matrix.reg }}.xlsx
+          if-no-files-found: error
+          retention-days: 30
