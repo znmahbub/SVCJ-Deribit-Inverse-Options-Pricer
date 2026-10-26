@@ -1,0 +1,27 @@
+name: stage2-targeted-tests
+
+on:
+  push:
+    branches: [stage2-canonical-notebooks]
+    paths:
+      - 'notebooks/**'
+      - 'tests/test_stage2_workflow.py'
+      - 'tests/test_stage2_notebooks.py'
+      - '.github/workflows/stage2-targeted-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage2-canonical-notebooks
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Run Stage 2 targeted tests
+        run: python -m unittest tests.test_stage2_workflow tests.test_stage2_notebooks -v
