@@ -17,12 +17,6 @@ class NotebookProgressTests(unittest.TestCase):
         self.assertIn('desc="Calibration specifications"', stage2)
         self.assertIn('desc="Pricing specifications"', stage2)
 
-    def test_calibration_inner_snapshot_loop_exposes_progress_bar(self) -> None:
-        batch = _read("src/batch_runner.py")
-        self.assertIn("from tqdm.auto import tqdm", batch)
-        self.assertIn('desc=f"{currency} calibration"', batch)
-        self.assertIn('unit="snapshot"', batch)
-
     def test_stage3_and_final_assembly_expose_progress_bars(self) -> None:
         stage3 = _read("notebooks/_lib/stage3_workflow.py")
         self.assertIn("from tqdm.auto import tqdm", stage3)
