@@ -1,0 +1,226 @@
+name: temporary-final-e2e-verification
+
+on:
+  push:
+    branches:
+      - stage4-5-final-validation-cleanup
+    paths:
+      - .github/workflows/temporary-final-e2e-verification.yml
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Stage 4/5
+        uses: actions/checkout@v4
+        with:
+          ref: stage4-5-final-validation-cleanup
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt nbconvert nbclient ipykernel
+
+      - name: Run complete unit suite on clean repository view
+        run: |
+          rm -f .github/workflows/temporary-final-e2e-verification.yml
+          python -m unittest discover -s tests -v
+
+      - name: Prepare two real snapshots
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, shutil
+          root = Path.cwd(); data = root / 'data'
+          files = sorted(data.glob('deribit_options_snapshot_*.csv'))
+          if len(files) < 2:
+              raise RuntimeError(f'need >=2 snapshots, got {len(files)}')
+          chosen = files[-2:]
+          keep = {p.name for p in chosen}
+          for p in files:
+              if p.name not in keep:
+                  p.unlink()
+          for p in [
+              root/'excel files'/'canonical',
+              root/'notebooks'/'pricing_outputs'/'canonical',
+              root/'notebooks'/'hedging_outputs'/'canonical',
+              root/'notebooks'/'final_outputs'/'canonical',
+          ]:
+              if p.exists():
+                  shutil.rmtree(p)
+          payload = {'selected_snapshots': [p.name for p in chosen]}
+          Path('acceptance_selection.json').write_text(json.dumps(payload, indent=2), encoding='utf-8')
+          print(json.dumps(payload, indent=2))
+          PY
+
+      - name: Execute notebooks 00 to 04 sequentially
+        env:
+          MPLBACKEND: Agg
+        run: |
+          set -euo pipefail
+          for nb in \
+            notebooks/00_check_data.ipynb \
+            notebooks/01_run_calibration.ipynb \
+            notebooks/02_pricing_analysis.ipynb \
+            notebooks/03_run_hedging.ipynb \
+            notebooks/04_final_analysis.ipynb
+          do
+            echo "========== EXECUTING ${nb} =========="
+            jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=7200 "${nb}"
+          done
+
+      - name: Verify generated outputs and mathematical logic
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import json, re
+          from pathlib import Path
+          import nbformat
+          import numpy as np
+          import pandas as pd
+
+          root = Path.cwd()
+          selected = json.loads((root/'acceptance_selection.json').read_text())['selected_snapshots']
+          rx = re.compile(r'deribit_options_snapshot_(\d{8}T\d{6})Z\.csv')
+          times = [pd.to_datetime(rx.fullmatch(x).group(1), format='%Y%m%dT%H%M%S', utc=True) for x in selected]
+          expected = {(t,c) for t in times for c in ('BTC','ETH')}
+          report = {'selected_snapshots': selected, 'checks': [], 'calibration': {}, 'pricing': {}, 'hedging': {}, 'final': {}}
+
+          def check(cond, msg):
+              if not bool(cond):
+                  raise AssertionError(msg)
+              report['checks'].append(msg)
+
+          def num(x):
+              return pd.to_numeric(x, errors='coerce').to_numpy(float)
+
+          def rmse(x):
+              a = np.asarray(x, float); a = a[np.isfinite(a)]
+              return float(np.sqrt(np.mean(a*a))) if len(a) else np.nan
+
+          for name in ['00_check_data.ipynb','01_run_calibration.ipynb','02_pricing_analysis.ipynb','03_run_hedging.ipynb','04_final_analysis.ipynb']:
+              nb = nbformat.read(root/'notebooks'/name, as_version=4)
+              errors = [out.get('evalue','error') for cell in nb.cells for out in cell.get('outputs',[]) if out.get('output_type') == 'error']
+              check(not errors, f'{name}: no execution errors')
+
+          test_frames = {}; test_keys = {}
+          for spec, lam in [('wls',0.0),('pwls',1.0)]:
+              path = root/'excel files'/'canonical'/f'calibration_{spec}.xlsx'
+              check(path.exists(), f'{spec}: calibration workbook exists')
+              check(set(pd.ExcelFile(path).sheet_names) == {'black_params','heston_params','svcj_params','train_data','test_data'}, f'{spec}: canonical calibration schema')
+              model_info = {}
+              for model in ('black','heston','svcj'):
+                  d = pd.read_excel(path, sheet_name=f'{model}_params')
+                  d['timestamp'] = pd.to_datetime(d.timestamp, utc=True); d['currency'] = d.currency.astype(str).str.upper()
+                  check(set(zip(d.timestamp,d.currency)) == expected, f'{spec} {model}: all smoke blocks present')
+                  check(np.allclose(num(d.l2_prev_strength), lam, rtol=0, atol=0), f'{spec} {model}: lambda_TS={lam:g}')
+                  success = d.success.fillna(False).astype(bool)
+                  check(success.all(), f'{spec} {model}: every calibration converged')
+                  if model == 'svcj':
+                      check(not d.svcj_martingale_violated.fillna(False).astype(bool).any(), f'{spec} SVCJ: martingale admissibility')
+                      check(not d.svcj_contour_violated.fillna(False).astype(bool).any(), f'{spec} SVCJ: contour admissibility')
+                  model_info[model] = {'rows': int(len(d)), 'success': int(success.sum())}
+              tr = pd.read_excel(path, sheet_name='train_data'); te = pd.read_excel(path, sheet_name='test_data'); test_frames[spec] = te.copy()
+              for f in (tr,te):
+                  f['snapshot_ts'] = pd.to_datetime(f.snapshot_ts, utc=True); f['currency'] = f.currency.astype(str).str.upper()
+              check(set(tr.split.astype(str).str.lower()) == {'train'}, f'{spec}: train sheet pure')
+              check(set(te.split.astype(str).str.lower()) == {'test'}, f'{spec}: test sheet pure')
+              shares = []
+              for ts,c in sorted(expected):
+                  a = tr[(tr.snapshot_ts==ts)&(tr.currency==c)]; b = te[(te.snapshot_ts==ts)&(te.currency==c)]
+                  check(len(a)>0 and len(b)>0, f'{spec} {c} {ts}: both splits nonempty')
+                  check(not(set(a.instrument_name.astype(str)) & set(b.instrument_name.astype(str))), f'{spec} {c} {ts}: no split overlap')
+                  shares.append(len(a)/(len(a)+len(b)))
+              check(all(.65 <= x <= .75 for x in shares), f'{spec}: per-block split approximately 70/30')
+              test_keys[spec] = set(map(tuple, te[['snapshot_ts','currency','instrument_name']].astype(str).itertuples(index=False,name=None)))
+              report['calibration'][spec] = {'models': model_info, 'train_rows': int(len(tr)), 'test_rows': int(len(te)), 'train_shares': shares}
+          check(test_keys['wls'] == test_keys['pwls'], 'WLS/PWLS deterministic holdout identical')
+
+          proot = root/'notebooks'/'pricing_outputs'/'canonical'
+          for spec in ('wls','pwls'):
+              overall = pd.read_csv(proot/spec/'baseline_overall_metrics.csv')
+              pooled = overall[overall.scope=='Pooled'].iloc[0]
+              check(set(overall.scope) == {'BTC','ETH','Pooled'}, f'{spec}: pricing scopes BTC/ETH/Pooled')
+              te = test_frames[spec]; F = num(te.F0); mid = num(te.mid_price_clean); metrics = {}
+              for model in ('black','heston','svcj'):
+                  check(pd.isna(pooled[f'rmse_coin_{model}']) and pd.isna(pooled[f'mae_coin_{model}']), f'{spec} {model}: pooled raw-coin errors undefined')
+                  err = num(te[f'price_{model}']) - mid
+                  direct = rmse(F*err); reported = float(pooled[f'rmse_usd_{model}'])
+                  check(np.isclose(direct, reported, rtol=1e-10, atol=1e-12), f'{spec} {model}: pooled USD RMSE reconstructs')
+                  metrics[model] = {'rmse_usd': reported}
+              report['pricing'][spec] = metrics
+          check(set(pd.read_csv(proot/'overall_metrics_by_specification.csv').specification) == {'wls','pwls'}, 'pricing comparison contains both specs')
+
+          hroot = root/'notebooks'/'hedging_outputs'/'canonical'
+          for spec in ('wls','pwls'):
+              path = root/'excel files'/'canonical'/f'hedging_{spec}.xlsx'
+              check(path.exists(), f'{spec}: hedging workbook exists')
+              te = pd.read_excel(path, sheet_name='test_data'); panel = pd.read_excel(path, sheet_name='hedge_interval_panel'); pv = pd.read_excel(path, sheet_name='price_verification')
+              check(set(te.split.astype(str).str.lower()) == {'test'}, f'{spec}: hedge option sheet test-only')
+              check(set(panel.split.astype(str).str.lower()) <= {'test'}, f'{spec}: interval panel test-only')
+              eligible = panel.is_summary_eligible.fillna(False).astype(bool)
+              check(int(eligible.sum()) > 0, f'{spec}: nonempty hedge-eligible sample')
+              price_diag = {}
+              for model in ('black','heston','svcj'):
+                  q = pv[pv.model.astype(str).str.lower()==model]
+                  check(len(q) == 4, f'{spec} {model}: four price-verification blocks')
+                  check(q.error.isna().all(), f'{spec} {model}: no repricing errors')
+                  check((pd.to_numeric(q.n_valid_prices) == pd.to_numeric(q.n_rows)).all(), f'{spec} {model}: all test prices finite')
+                  maxdiff = float(pd.to_numeric(q.max_abs_price_diff, errors='coerce').max())
+                  check(maxdiff < 1e-10, f'{spec} {model}: hedging repricing matches calibration prices <1e-10 coin')
+                  reg = num(te[f'regular_delta_{model}']); net = num(te[f'net_delta_{model}']); price = num(te[f'price_{model}']); m = np.isfinite(reg)&np.isfinite(net)&np.isfinite(price)
+                  check(np.allclose(net[m], reg[m]-price[m], rtol=1e-10, atol=1e-10), f'{spec} {model}: net delta = regular delta - V_coin')
+                  price_diag[model] = maxdiff
+              F = num(panel.F_term); H0 = num(panel.H_perp); H1 = num(panel.perp_close_t1); scale = num(panel.hedge_notional_scale_usd_per_delta)
+              valid = np.isfinite(F)&np.isfinite(H0)&np.isfinite(scale)&(F>0)&(H0>0)
+              check(np.allclose(scale[valid], H0[valid]**2/F[valid], rtol=1e-12, atol=1e-12), f'{spec}: hedge scale H^2/F')
+              keys = ['snapshot_ts','currency','instrument_name']; delta_cols = [f'{kind}_delta_{m}' for m in ('black','heston','svcj') for kind in ('regular','net')]
+              merged = panel.merge(te[keys+delta_cols], on=keys, how='left', validate='many_to_one'); elig = merged.is_summary_eligible.fillna(False).astype(bool).to_numpy()
+              for model in ('black','heston','svcj'):
+                  for hedge_type, delta_col in [('delta',f'regular_delta_{model}'),('net_delta',f'net_delta_{model}')]:
+                      delta = num(merged[delta_col]); N = num(merged[f'hedge_notional_usd_{model}_{hedge_type}']); mask = elig&np.isfinite(delta)&np.isfinite(N)&np.isfinite(scale)
+                      check(mask.any(), f'{spec} {model} {hedge_type}: eligible finite rows')
+                      check(np.allclose(N[mask], scale[mask]*delta[mask], rtol=1e-10, atol=1e-10), f'{spec} {model} {hedge_type}: N_USD=(H^2/F)delta')
+                      un = num(merged.option_pnl_coin_short); actual = num(merged[f'net_pnl_coin_{model}_{hedge_type}']); direct = un + N*(1/H0 - 1/H1); pm = mask&np.isfinite(H1)&(H1>0)&np.isfinite(un)&np.isfinite(actual)
+                      check(np.allclose(actual[pm], direct[pm], rtol=1e-10, atol=1e-12), f'{spec} {model} {hedge_type}: inverse-perp hedge-error identity')
+              headline = pd.read_csv(hroot/spec/'headline_test.csv')
+              check(len(headline)>0, f'{spec}: headline hedge table nonempty')
+              check(set(headline.model.astype(str).str.lower()) == {'black','heston','svcj'}, f'{spec}: headline all models')
+              check(set(headline.hedge_type.astype(str).str.lower()) == {'delta','net_delta'}, f'{spec}: headline both hedge rules')
+              report['hedging'][spec] = {'panel_rows': int(len(panel)), 'eligible_intervals': int(eligible.sum()), 'max_repricing_diff_by_model': price_diag}
+
+          final = root/'notebooks'/'final_outputs'/'canonical'; manifest = pd.read_csv(final/'manifest.csv')
+          check(len(manifest)>0, 'final manifest nonempty')
+          check({'pricing_table','pricing_figure','hedging_table','hedging_figure'} <= set(manifest.artifact_type), 'final manifest all artifact classes')
+          check(all(Path(x).exists() for x in manifest.destination.astype(str)), 'all manifest destinations exist')
+          check(manifest.destination.astype(str).str.contains('/hedging/wls/').any(), 'final package WLS hedging included')
+          check(manifest.destination.astype(str).str.contains('/hedging/pwls/').any(), 'final package PWLS hedging included')
+          report['final'] = {'manifest_rows': int(len(manifest)), 'artifact_counts': manifest.artifact_type.value_counts().to_dict()}
+
+          (root/'acceptance_report.json').write_text(json.dumps(report, indent=2, default=str), encoding='utf-8')
+          print('FINAL_ACCEPTANCE_SUCCESS')
+          print(json.dumps(report, indent=2, default=str))
+          PY
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-stage45-acceptance
+          path: |
+            acceptance_selection.json
+            acceptance_report.json
+            excel files/canonical/*.xlsx
+            notebooks/pricing_outputs/canonical/
+            notebooks/hedging_outputs/canonical/
+            notebooks/final_outputs/canonical/
+          if-no-files-found: warn
