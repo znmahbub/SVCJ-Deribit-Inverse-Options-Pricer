@@ -133,37 +133,19 @@ def remove_superseded_notebook_surface() -> None:
         legacy_helper.unlink()
 
 
-def remove_remediation_automation() -> None:
-    workflows = ROOT / ".github" / "workflows"
-    allowed = {"collect_deribit_snapshot.yml", "update-futures-history.yml", "stage4-verification.yml", "stage5-cleanup.yml"}
-    for path in workflows.glob("*.yml"):
-        if path.name not in allowed:
-            path.unlink()
+def remove_remediation_files() -> None:
     scripts = ROOT / "scripts"
     for path in scripts.glob("task13*.py"):
         path.unlink()
-
-
-def remove_superseded_docs() -> None:
-    path = ROOT / "docs" / "reproducibility" / "regularization_selection.md"
-    if path.exists():
-        path.unlink()
+    selection_doc = ROOT / "docs" / "reproducibility" / "regularization_selection.md"
+    if selection_doc.exists():
+        selection_doc.unlink()
     superpowers = ROOT / "docs" / "superpowers"
     if superpowers.exists():
         shutil.rmtree(superpowers)
 
 
-def promote_ci_and_remove_one_shot_files() -> None:
-    workflows = ROOT / ".github" / "workflows"
-    old = workflows / "stage4-verification.yml"
-    new = workflows / "ci.yml"
-    if old.exists():
-        text = old.read_text(encoding="utf-8").replace("name: Stage 4 verification", "name: Canonical verification")
-        new.write_text(text, encoding="utf-8")
-        old.unlink()
-    cleanup_workflow = workflows / "stage5-cleanup.yml"
-    if cleanup_workflow.exists():
-        cleanup_workflow.unlink()
+def remove_one_shot_script() -> None:
     self_path = ROOT / "scripts" / "stage5_cleanup.py"
     if self_path.exists():
         self_path.unlink()
@@ -176,12 +158,9 @@ def main() -> None:
     clean_chapter3_final()
     clean_stage2_workflow()
     remove_superseded_notebook_surface()
-    remove_remediation_automation()
-    remove_superseded_docs()
-    promote_ci_and_remove_one_shot_files()
+    remove_remediation_files()
+    remove_one_shot_script()
 
 
 if __name__ == "__main__":
     main()
-
-# One-shot trigger: this file deletes itself after a successful cleanup commit.
