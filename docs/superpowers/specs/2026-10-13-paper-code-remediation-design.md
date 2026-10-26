@@ -25,7 +25,6 @@ This design treats the preceding paper/code audit as the accepted scope. The pri
 11. The Feller condition is softly penalized, not hard-imposed.
 12. The perpetual-futures history is a candle-based price proxy in the current backfill path, despite `mark_price` naming.
 13. The manuscript says stale quotes are removed even though no quote-age filter is implemented.
-14. Zero discounting should be justified with a quantitative robustness check because the sample contains longer maturities.
 15. Diebold-Mariano-style inference should be described as inference on snapshot-level cross-sectional holdout-loss differentials, not conventional time-series forecast evaluation.
 16. Structural interpretation of weakly identified ETH parameters should be softened.
 17. The literature review and presentation should be strengthened for a research-paper-quality version.
@@ -43,7 +42,7 @@ Old workbooks and the current thesis PDF are baseline artifacts. Corrected outpu
 
 Use explicit notation throughout:
 
-- `Q`: the pricing measure used by `cf_black`, `cf_heston`, and `cf_svcj`, under which the dated futures price `F_t` is a martingale under the maintained deterministic/zero-discounting setup.
+- `Q`: the pricing measure used by `cf_black`, `cf_heston`, and `cf_svcj`, under which the dated futures price `F_t` is a martingale.
 - `Q^F`: the measure induced by the futures-price numeraire when performing the inverse-option numeraire change.
 
 The regular call price is computed under `Q`. The regular call delta is the shifted-characteristic-function quantity
@@ -98,11 +97,7 @@ The candle-backed perpetual field will be described and named as a perpetual pri
 
 The manuscript will stop claiming that a quote-age stale-quote filter exists unless one is actually implemented.
 
-### 10. Treat discounting as a robustness gate
-
-Keep zero discounting as the baseline initially, but run deterministic rate scenarios over the observed maturity distribution. If nonzero discounting changes model rankings or the main effect sizes materially, promote discounting into the baseline model and rerun. Otherwise retain zero discounting with the robustness evidence reported explicitly.
-
-### 11. Code first, manuscript second, final rerun last
+### 10. Code first, manuscript second, final rerun last
 
 The editable manuscript source is not currently present on the branch; `docs/` contains the PDF and code documentation only. Before manuscript edits begin, add the actual LaTeX source and bibliography to the repository. Do not manually change headline numbers in prose/tables before corrected workbooks and exported tables exist.
 

@@ -284,8 +284,8 @@ The test suite is part of the documented structure because it now enforces behav
 ### Pricing measure and inverse-option Greeks
 
 `src/inverse_fft_pricer.py` defines `cf_black`, `cf_heston`, and `cf_svcj`
-under the pricing measure `Q` for which the dated futures price is a martingale
-under the maintained deterministic/zero-discounting setup. `src/greeks.py`
+under the pricing measure `Q` for which the dated futures price is a martingale.
+`src/greeks.py`
 performs the separate futures-price-numeraire change used for regular delta:
 the shifted characteristic function is `phi_Q(u-i) / phi_Q(-i)` and therefore
 `P1 = Q^F(F_T > K)`. Under Black, direct `Q` exercise probability is `N(d2)`,
@@ -367,8 +367,6 @@ diagnostics.
 
 New perpetual-history rows use `perp_futures_price_proxy` rather than the misleading `perp_futures_mark_price` label. The thesis baseline proxy comes from Deribit's TradingView chart endpoint and chooses the closer of the one-minute candle open or close to the option-snapshot timestamp, subject to the maximum-gap rule. Source/kind, chosen candle endpoint, timestamp gap, and resolution are retained through the hedge loader and written into `hedge_notes`. Legacy files with `perp_futures_mark_price` remain readable, but the loader emits a warning and tags them as `legacy_mark_named_candle_proxy`.
 
-### Discounting and identification robustness
+### SVCJ identification diagnostics
 
-`notebooks/_lib/robustness.py` provides deterministic discount-factor scenarios at 0%, 2.5%, 5%, and 7.5% without changing the calibration itself. Under the maintained futures-option convention it multiplies the regular USD option value by `exp(-rT)` before inverse conversion; equivalently the already-computed coin premium is multiplied by the same deterministic factor. The pre-Task-13 promotion rule is fixed ex ante: promote discounting into the baseline if a plausible positive-rate scenario reverses the model RMSE ranking, changes a model RMSE by at least 5% relative, or moves within-spread share by at least 2 percentage points.
-
-The same module reports SVCJ Feller-gap frequencies, Brownian-`rho` boundary clustering, `sigma_y`/jump-intensity near-bound behavior, martingale/FFT-contour moment margins, descriptive `|rho_j|>1` frequency, and parameter correlations. `rho_j` has no boundary-hit statistic because it is an unbounded conditional jump-size loading. `notebooks/robustness_checks.ipynb` is prepared to compare the legacy and corrected parameter paths once Task 13 has generated the corrected WLS (`lambda_TS=0`) and provisional penalized-WLS (`lambda_TS=100`) workbooks.
+`notebooks/_lib/robustness.py` reports SVCJ Feller-gap frequencies, Brownian-`rho` boundary clustering, `sigma_y`/jump-intensity near-bound behavior, martingale/FFT-contour moment margins, descriptive `|rho_j|>1` frequency, and parameter correlations. `rho_j` has no boundary-hit statistic because it is an unbounded conditional jump-size loading. `notebooks/robustness_checks.ipynb` exports these diagnostics for the corrected calibration paths.

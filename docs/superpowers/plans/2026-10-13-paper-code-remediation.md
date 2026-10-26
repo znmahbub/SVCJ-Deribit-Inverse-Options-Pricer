@@ -58,7 +58,6 @@
 | Feller described as imposed instead of penalized | 6, 13 |
 | Perpetual “mark” is a candle proxy | 11, 13 |
 | “Stale quote” claim unsupported | 13 |
-| Zero-discount assumption needs robustness | 12, 13 |
 | DM terminology overstates forecast interpretation | 9, 13 |
 | Weakly identified ETH parameters over-interpreted | 12, 13 |
 | Literature review too narrow | 14 |
@@ -162,7 +161,7 @@ git commit -m "docs: add reproducible thesis source"
   - `call_p1_from_logprice_cf(K, F0, cf, *, quad_u_max, quad_n) -> np.ndarray`
   - `regular_delta_from_call_p1(p1, option_type) -> np.ndarray`
   - `net_delta(regular_delta, inverse_price) -> np.ndarray`
-- `cf_black`, `cf_heston`, `cf_svcj` remain characteristic functions under the measure `Q` for which `F_t` is a martingale under the maintained deterministic/zero-discount setup.
+- `cf_black`, `cf_heston`, `cf_svcj` remain characteristic functions under the measure `Q` for which `F_t` is a martingale.
 
 - [ ] **Step 1: Write the Black closed-form identity tests.** Assert `phi_Q(-i)=F0`, direct ITM probability equals `N(d2)`, shifted-CF `P1` equals `N(d1)`, call regular delta equals `N(d1)`, put regular delta equals `N(d1)-1`, and `net_delta = regular_delta - price_coin`.
 
@@ -540,37 +539,35 @@ git commit -m "fix: make perpetual hedge price provenance explicit"
 
 ---
 
-### Task 12: Add discounting and identification robustness diagnostics
+### Task 12: Add SVCJ identification diagnostics
 
 **Files:**
 - Create: `notebooks/_lib/robustness.py`
 - Create: `notebooks/robustness_checks.ipynb`
 - Create: `tests/test_robustness_helpers.py`
-- Modify: `notebooks/_lib/chapter3_final.py`
 
 **Interfaces:**
-- Produces deterministic discounting-sensitivity tables for scenario rates `0%`, `2.5%`, `5%`, and `7.5%` across observed maturities without changing the baseline calibration first.
-- Produces parameter-identification diagnostics including boundary frequency, Feller-gap distribution, jump-moment margins, and parameter correlations after the `rho_j` fix.
+- Produces parameter-path diagnostics for Feller gaps, Brownian-`rho` boundary clustering, jump-parameter near-bound behavior, SVCJ moment-domain margins, the empirical distribution of unbounded `rho_j`, and parameter correlations.
 
-- [ ] **Step 1: Write discount-factor helper tests.** Assert `D(T,r)=exp(-rT)`, `r=0` reproduces current prices exactly, and sensitivity grows monotonically with `T` for positive rates.
+- [ ] **Step 1: Write identification-helper tests.** Verify currency-specific summaries, Feller diagnostics, moment margins, and that `rho_j` is treated as an unbounded loading rather than a bounded correlation.
 
-- [ ] **Step 2: Implement scenario robustness helpers.** Apply discounting consistently to the regular USD futures-option value before conversion to coin units according to the corrected theory note from Task 3; do not alter the baseline calibration yet.
+- [ ] **Step 2: Implement identification helpers.** Keep the module diagnostic-only; it must not alter calibration, pricing, or hedging conventions.
 
-- [ ] **Step 3: Define the promotion rule.** If plausible nonzero-rate scenarios reverse any model ranking or change a headline RMSE/within-spread conclusion materially, stop and promote discounting into the baseline pricing/calibration pipeline before Task 13. Otherwise keep zero discounting and report the measured sensitivity as robustness.
+- [ ] **Step 3: Add the identification notebook.** Export summary tables and currency-specific parameter-correlation matrices for the corrected calibration paths.
 
-- [ ] **Step 4: Recompute identification diagnostics after unbounding `rho_j`.** Specifically compare old/new ETH boundary behavior, `sigma_y`, `lambda`, and jump-moment margins; do not interpret parameter paths structurally until these diagnostics are available.
-
-- [ ] **Step 5: Run tests.**
+- [ ] **Step 4: Run tests.**
 
 ```bash
 python -m unittest tests.test_robustness_helpers -v
 ```
 
-- [ ] **Step 6: Commit.**
+Expected: PASS.
+
+- [ ] **Step 5: Commit.**
 
 ```bash
-git add notebooks/_lib/robustness.py notebooks/robustness_checks.ipynb tests/test_robustness_helpers.py notebooks/_lib/chapter3_final.py
-git commit -m "feat: add discounting and identification robustness"
+git add notebooks/_lib/robustness.py notebooks/robustness_checks.ipynb tests/test_robustness_helpers.py
+git commit -m "feat: add SVCJ identification diagnostics"
 ```
 
 ---
@@ -652,7 +649,6 @@ git commit -m "results: regenerate corrected thesis evidence"
 
 - [ ] **Step 8: Replace all Chapter 3 and 4 headline tables/figures with Task 13 exports.** Never transcribe numbers by hand when an exported CSV/LaTeX table can be included/generated.
 
-- [ ] **Step 9: Add the discounting robustness result.** If Task 12 did not promote discounting to baseline, justify zero discounting quantitatively; if it did, update the baseline equations/results consistently.
 
 - [ ] **Step 10: Preserve already-correct caveats.** Keep the statement that transaction costs/funding are excluded from clean hedge diagnostics; keep raw `K/F` moneyness buckets.
 
@@ -767,7 +763,7 @@ Implement strictly in task order. The following are hard stop conditions:
 3. **Task 5:** if SVCJ contour admissibility cannot be made stable for the thesis parameter region, stop and redesign the SVCJ numerical integration before recalibration.
 4. **Task 7:** if sequential and resumed regularized runs disagree materially, do not generate any regularization sweep.
 5. **Task 9:** do not inspect/quote final test metrics until the regularization choice is recorded.
-6. **Task 12:** if discounting materially changes the model ranking, promote discounting to the baseline and rerun calibration before manuscript edits.
+6. **Task 12:** review SVCJ identification diagnostics before interpreting structural parameter paths.
 7. **Task 13:** if corrected results materially overturn a thesis conclusion, rewrite the conclusion to match the evidence rather than trying to preserve the old claim.
 
 ## Expected corrected empirical narrative
@@ -794,7 +790,7 @@ If any of these fail after the corrected rerun, the manuscript must report the c
 - [ ] Validation-only regularization selection record
 - [ ] Unit-consistent pricing metrics
 - [ ] Honest perpetual-price proxy schema/provenance
-- [ ] Discounting + identification robustness
+- [ ] SVCJ identification diagnostics
 - [ ] Full corrected calibration and hedging rerun
 - [ ] Manuscript rewritten from generated outputs
 - [ ] Literature/presentation pass
