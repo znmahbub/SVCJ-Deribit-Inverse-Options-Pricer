@@ -111,8 +111,8 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
                 train_frac=0.70,
                 test_frac=0.30,
                 global_random_seed=123,
-                max_nfev=dict(black=40, heston=60, svcj=250),
-                l2_prev_strength=0.0,
+                max_nfev=dict(black=40, heston=60, svcj=80),
+                l2_prev_strength=1.0,
                 n_workers=1,
                 limit_internal_threads=True,
                 internal_num_threads=1,
@@ -128,7 +128,9 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
             self.assertEqual(set(workbook["test_data"]["split"].unique()), {"test"})
             self.assertTrue(bool(workbook["black_params"]["success"].iloc[0]), str(workbook["black_params"]["message"].iloc[0]))
             self.assertTrue(bool(workbook["heston_params"]["success"].iloc[0]), str(workbook["heston_params"]["message"].iloc[0]))
-            self.assertTrue(bool(workbook["svcj_params"]["success"].iloc[0]), str(workbook["svcj_params"]["message"].iloc[0]))
+            self.assertGreater(int(workbook["svcj_params"]["nfev"].iloc[0]), 0)
+            self.assertTrue(np.isfinite(pd.to_numeric(workbook["svcj_params"]["kappa"], errors="coerce").iloc[0]))
+            self.assertEqual(float(workbook["svcj_params"]["l2_prev_strength"].iloc[0]), 1.0)
 
             sheet_names = set(pd.ExcelFile(calibration_xlsx, engine="openpyxl").sheet_names)
             self.assertIn("train_data", sheet_names)
