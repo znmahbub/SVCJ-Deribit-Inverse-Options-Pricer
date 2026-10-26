@@ -29,9 +29,10 @@ import threading
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from .analysis_window import (
     TimestampLike,
@@ -78,6 +79,9 @@ _WORKBOOK_SHEETS = (
     TRAIN_SHEET,
     TEST_SHEET,
 )
+
+_PROGRESS_EVENT = tuple[str, str, int]
+_PROCESS_PROGRESS_QUEUE = None
 
 
 def _default_n_workers() -> int:
@@ -160,7 +164,10 @@ class BatchConfig:
     # Currencies
     currencies: tuple[str, ...] = ("BTC", "ETH")
 
-    # Logging
+    # Progress / logging
+    show_progress: bool = False
+    progress_label: Optional[str] = None
+    progress_position_offset: int = 0
     verbose: bool = False
 
     def __post_init__(self) -> None:
@@ -177,6 +184,7 @@ class BatchConfig:
         )
         self.save_every_n_files = int(self.save_every_n_files)
         self.n_workers = int(self.n_workers)
+        self.progress_position_offset = int(self.progress_position_offset)
         # Validate the configured fractions once at construction time.
         SplitConfig(
             train_frac=float(self.train_frac),
@@ -306,6 +314,57 @@ def _currency_process_count(cfg: BatchConfig, available_cpus: int | None = None)
     return max(1, min(len(cfg.currencies), cpus))
 
 
+class _ProgressDisplay:
+    """Own the fixed per-currency tqdm bars for one calibration specification."""
+
+    def __init__(self, cfg: BatchConfig, currencies: tuple[str, ...]):
+        self.enabled = bool(cfg.show_progress)
+        self._bars: dict[str, Any] = {}
+        if not self.enabled:
+            return
+        label = str(cfg.progress_label or cfg.output_xlsx.stem).strip()
+        for index, currency in enumerate(currencies):
+            currency = str(currency).upper()
+            self._bars[currency] = tqdm(
+                total=0,
+                desc=f"{label} {currency}",
+                position=int(cfg.progress_position_offset) + index,
+                leave=True,
+                unit="snapshot",
+                dynamic_ncols=True,
+            )
+
+    def handle(self, event: _PROGRESS_EVENT) -> None:
+        if not self.enabled:
+            return
+        kind, currency, value = event
+        bar = self._bars.get(str(currency).upper())
+        if bar is None:
+            return
+        if kind == "total":
+            bar.reset(total=max(0, int(value)))
+        elif kind == "advance":
+            bar.update(int(value))
+
+    def close(self) -> None:
+        for bar in self._bars.values():
+            bar.close()
+
+
+def _init_currency_progress_queue(progress_queue) -> None:
+    """Install the parent-owned progress queue in a spawned currency worker."""
+    global _PROCESS_PROGRESS_QUEUE
+    _PROCESS_PROGRESS_QUEUE = progress_queue
+
+
+def _listen_for_progress(progress_queue, display: _ProgressDisplay) -> None:
+    while True:
+        event = progress_queue.get()
+        if event is None:
+            return
+        display.handle(event)
+
+
 # ---------------------------------------------------------------------------
 # Warm start helpers
 # ---------------------------------------------------------------------------
@@ -365,6 +424,7 @@ def run_currency_to_excel(
     *,
     cfg: BatchConfig,
     workbook: Optional[dict[str, pd.DataFrame]] = None,
+    progress_callback: Optional[Callable[[_PROGRESS_EVENT], None]] = None,
 ) -> dict[str, pd.DataFrame]:
     """Run one currency and checkpoint it to Parquet; final Excel is written later."""
     currency = str(currency).upper()
@@ -401,16 +461,21 @@ def run_currency_to_excel(
     if cfg.smoke_test_max_files_per_currency is not None:
         pending = pending[: int(cfg.smoke_test_max_files_per_currency)]
 
+    if progress_callback is not None:
+        progress_callback(("total", currency, len(pending)))
+
+    log_verbose = bool(cfg.verbose and not cfg.show_progress)
+
     if not pending:
         flush_currency_checkpoint(_currency_only_workbook(workbook, currency), checkpoint_dir)
-        if cfg.verbose:
+        if log_verbose:
             print(f"[{currency}] Nothing to do (resume found up-to-date workbook).")
         return workbook
 
     requested_workers = max(1, min(int(cfg.n_workers), len(pending)))
     n_workers = 1 if float(cfg.l2_prev_strength) > 0.0 else requested_workers
 
-    if cfg.verbose:
+    if log_verbose:
         suffix = (
             " (forced sequential by temporal regularization)"
             if n_workers == 1 and requested_workers > 1 and float(cfg.l2_prev_strength) > 0.0
@@ -485,7 +550,7 @@ def run_currency_to_excel(
                             min_options_after_filter=cfg.min_options_after_filter,
                             warm_start=warm,
                             l2_prev_strength=cfg.l2_prev_strength,
-                            verbose=cfg.verbose,
+                            verbose=log_verbose,
                         )
                     except Exception as e:
                         payload = _exception_payload(path, seed=seed, message=f"Unhandled exception: {repr(e)}", warm=warm)
@@ -526,7 +591,9 @@ def run_currency_to_excel(
             append_df(workbook, TEST_SHEET, pld.get("test_df", pd.DataFrame()))
             next_commit += 1
             committed_since_flush += 1
-            if cfg.verbose:
+            if progress_callback is not None:
+                progress_callback(("advance", currency, 1))
+            if log_verbose:
                 ts_iso = pld.get("timestamp_iso", "?")
                 print(f"[{currency}] committed {next_commit}/{total} | {ts_iso}")
             if committed_since_flush >= int(cfg.save_every_n_files):
@@ -543,7 +610,15 @@ def run_currency_to_excel(
 def _run_currency_checkpoint_worker(currency: str, cfg: BatchConfig) -> str:
     """Process one independent currency chain inside a child process."""
     workbook = _load_currency_resume_workbook(cfg, currency)
-    run_currency_to_excel(currency, cfg=cfg, workbook=workbook)
+    progress_callback = None
+    if _PROCESS_PROGRESS_QUEUE is not None:
+        progress_callback = _PROCESS_PROGRESS_QUEUE.put
+    run_currency_to_excel(
+        currency,
+        cfg=cfg,
+        workbook=workbook,
+        progress_callback=progress_callback,
+    )
     return str(currency).upper()
 
 
@@ -552,30 +627,67 @@ def run_all_snapshots_to_excel(cfg: BatchConfig) -> dict[str, pd.DataFrame]:
     currencies = tuple(str(currency).upper() for currency in cfg.currencies)
     currency_workbooks: dict[str, dict[str, pd.DataFrame]] = {}
     process_count = _currency_process_count(cfg)
+    display = _ProgressDisplay(cfg, currencies)
 
-    if process_count > 1:
-        ctx = mp.get_context("spawn")
-        with ProcessPoolExecutor(max_workers=process_count, mp_context=ctx) as executor:
-            futures = {
-                executor.submit(_run_currency_checkpoint_worker, currency, cfg): currency
-                for currency in currencies
-            }
-            for future in as_completed(futures):
-                currency = futures[future]
-                future.result()
-                currency_workbooks[currency] = load_currency_checkpoint(
-                    _currency_checkpoint_dir(cfg.output_xlsx, currency)
+    try:
+        if process_count > 1:
+            ctx = mp.get_context("spawn")
+            progress_queue = ctx.Queue() if display.enabled else None
+            listener = None
+            if progress_queue is not None:
+                listener = threading.Thread(
+                    target=_listen_for_progress,
+                    args=(progress_queue, display),
+                    daemon=True,
                 )
-    else:
-        for currency in currencies:
-            workbook = _load_currency_resume_workbook(cfg, currency)
-            workbook = run_currency_to_excel(currency, cfg=cfg, workbook=workbook)
-            currency_workbooks[currency] = _currency_only_workbook(workbook, currency)
+                listener.start()
 
-    merged = _merge_currency_workbooks(currency_workbooks, currencies)
-    cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)
-    flush_workbook_atomic(merged, cfg.output_xlsx)
-    return merged
+            try:
+                executor_kwargs: dict[str, Any] = {
+                    "max_workers": process_count,
+                    "mp_context": ctx,
+                }
+                if progress_queue is not None:
+                    executor_kwargs.update(
+                        initializer=_init_currency_progress_queue,
+                        initargs=(progress_queue,),
+                    )
+                with ProcessPoolExecutor(**executor_kwargs) as executor:
+                    futures = {
+                        executor.submit(_run_currency_checkpoint_worker, currency, cfg): currency
+                        for currency in currencies
+                    }
+                    for future in as_completed(futures):
+                        currency = futures[future]
+                        future.result()
+                        currency_workbooks[currency] = load_currency_checkpoint(
+                            _currency_checkpoint_dir(cfg.output_xlsx, currency)
+                        )
+            finally:
+                if progress_queue is not None:
+                    progress_queue.put(None)
+                    if listener is not None:
+                        listener.join()
+                    progress_queue.close()
+                    progress_queue.join_thread()
+        else:
+            callback = display.handle if display.enabled else None
+            for currency in currencies:
+                workbook = _load_currency_resume_workbook(cfg, currency)
+                workbook = run_currency_to_excel(
+                    currency,
+                    cfg=cfg,
+                    workbook=workbook,
+                    progress_callback=callback,
+                )
+                currency_workbooks[currency] = _currency_only_workbook(workbook, currency)
+
+        merged = _merge_currency_workbooks(currency_workbooks, currencies)
+        cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)
+        flush_workbook_atomic(merged, cfg.output_xlsx)
+        return merged
+    finally:
+        display.close()
 
 
 __all__ = [
