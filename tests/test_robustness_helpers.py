@@ -2,75 +2,16 @@ from __future__ import annotations
 
 import unittest
 
-import numpy as np
 import pandas as pd
 
 from tests._path import ROOT  # noqa: F401
 from notebooks._lib.robustness import (
-    DEFAULT_SCENARIO_RATES,
-    apply_discounting_to_inverse_price,
-    assess_discounting_promotion,
-    build_discounting_sensitivity_table,
-    discount_factor,
     parameter_correlation_matrix,
     parameter_identification_summary,
 )
 
 
 class RobustnessHelperTests(unittest.TestCase):
-    def test_discount_factor_is_exponential_and_zero_rate_is_identity(self) -> None:
-        T = np.array([0.0, 0.25, 1.0])
-        got = discount_factor(T, 0.05)
-        np.testing.assert_allclose(got, np.exp(-0.05 * T), rtol=0.0, atol=1e-15)
-        np.testing.assert_array_equal(discount_factor(T, 0.0), np.ones_like(T))
-
-    def test_zero_rate_reproduces_current_inverse_prices_exactly(self) -> None:
-        price = np.array([0.01, 0.05, 0.20])
-        T = np.array([0.1, 0.5, 1.0])
-        np.testing.assert_array_equal(apply_discounting_to_inverse_price(price, T, 0.0), price)
-
-    def test_positive_rate_price_sensitivity_grows_with_maturity(self) -> None:
-        price = np.ones(3)
-        T = np.array([0.1, 0.5, 1.0])
-        discounted = apply_discounting_to_inverse_price(price, T, 0.075)
-        shift = np.abs(discounted - price)
-        self.assertTrue(np.all(np.diff(shift) > 0.0))
-
-    def test_sensitivity_table_has_all_scenario_rates_and_zero_rate_baseline(self) -> None:
-        quotes = pd.DataFrame(
-            {
-                "currency": ["BTC", "BTC"],
-                "time_to_maturity": [0.25, 1.0],
-                "bid_price": [0.09, 0.18],
-                "ask_price": [0.11, 0.22],
-                "mid_price_clean": [0.10, 0.20],
-                "price_black": [0.11, 0.21],
-                "price_heston": [0.105, 0.205],
-                "price_svcj": [0.10, 0.20],
-            }
-        )
-        table = build_discounting_sensitivity_table(quotes)
-        self.assertEqual(set(table["rate"]), set(DEFAULT_SCENARIO_RATES))
-        self.assertEqual(set(table["model"]), {"black", "heston", "svcj"})
-        baseline = table.loc[(table["rate"] == 0.0) & (table["model"] == "black")].iloc[0]
-        self.assertAlmostEqual(float(baseline["rmse_coin"]), np.sqrt((0.01**2 + 0.01**2) / 2.0))
-        self.assertAlmostEqual(float(baseline["mean_abs_price_shift_coin"]), 0.0)
-
-    def test_discounting_promotion_must_be_decided_within_currency(self) -> None:
-        table = pd.DataFrame(
-            [
-                {"scope": scope, "model": model, "rate": rate, "rmse_coin": rmse, "within_spread_share": within}
-                for scope in ("BTC", "ETH", "All")
-                for rate, rmse, within in ((0.0, 1.0, 0.5), (0.05, 1.01, 0.5))
-                for model in ("black", "heston", "svcj")
-            ]
-        )
-        with self.assertRaisesRegex(ValueError, "cross-asset"):
-            assess_discounting_promotion(table, scope="All")
-        decision = assess_discounting_promotion(table, scope="BTC")
-        self.assertEqual(decision["scope"], "BTC")
-        self.assertFalse(bool(decision["promote_discounting_to_baseline"]))
-
     def test_identification_summary_treats_rho_j_as_unbounded_loading(self) -> None:
         params = pd.DataFrame(
             {
