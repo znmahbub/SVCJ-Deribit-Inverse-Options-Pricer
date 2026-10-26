@@ -24,7 +24,7 @@ from src.greeks import (
     regular_delta_from_call_p1,
 )
 from src.hedge_mapping import hedge_notional_usd, inverse_perp_pnl
-from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj
+from src.inverse_fft_pricer import FFTParams, center_fft_params_on_strikes, cf_heston, cf_svcj
 from src.results_store import (
     PARAM_SHEET_BLACK,
     PARAM_SHEET_HESTON,
@@ -241,6 +241,26 @@ def filter_options_for_run(options: pd.DataFrame, cfg: HedgingConfig) -> pd.Data
     return out.sort_values(["snapshot_ts", "currency", "instrument_name"]).reset_index(drop=True)
 
 
+def build_fft_params_lookup(
+    workbook: dict[str, pd.DataFrame],
+    fft_params_base: FFTParams,
+) -> dict[tuple[str, str], dict[Any, FFTParams]]:
+    """Reconstruct the frozen per-expiry FFT grids used during calibration."""
+    full = combine_option_sheets(workbook, splits=("train", "test"))
+    lookup: dict[tuple[str, str], dict[Any, FFTParams]] = {}
+    if full.empty:
+        return lookup
+    for (snapshot_ts, currency), block in full.groupby(["snapshot_ts", "currency"], sort=True):
+        grids: dict[Any, FFTParams] = {}
+        for expiry, expiry_block in block.groupby("expiry_datetime", sort=False):
+            strikes = _num(expiry_block["strike"]).to_numpy(dtype=float)
+            strikes = strikes[np.isfinite(strikes) & (strikes > 0)]
+            if strikes.size:
+                grids[expiry] = center_fft_params_on_strikes(fft_params_base, strikes)
+        lookup[(_iso_z(snapshot_ts), str(currency).upper())] = grids
+    return lookup
+
+
 def build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str, str], dict[str, Any]]:
     lookup: dict[tuple[str, str, str], dict[str, Any]] = {}
     for model, sheet in PARAM_SHEETS.items():
@@ -450,7 +470,7 @@ def _intrinsic_regular_delta(option_type: np.ndarray, F: np.ndarray, K: np.ndarr
     return np.where(is_call, (F > K).astype(float), -(K > F).astype(float))
 
 
-def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True) -> np.ndarray:
+def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:
     if block.empty:
         return np.array([], dtype=float)
     out = np.full(len(block), np.nan, dtype=float)
@@ -467,14 +487,14 @@ def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, A
         return out
     live_block = block.loc[live].copy()
     live_prices = np.full(len(live_block), np.nan, dtype=float)
-    pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)
+    pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)
     _price_with_plan(pricing_plan, model=model.lower(), params=params, out_prices=live_prices, use_cache=use_cache)
     out[np.flatnonzero(live)] = live_prices
     return out
 
 
 
-def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> np.ndarray:
+def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:
     if block.empty:
         return np.array([], dtype=float)
     out = np.full(len(block), np.nan, dtype=float)
@@ -490,7 +510,7 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
     if not np.any(live):
         return out
     live_block = block.loc[live].copy()
-    pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)
+    pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)
     live_positions = np.flatnonzero(live)
     for idx, K_g, put_mask, T_g, F0_g, _ in pricing_plan:
         K_g = np.asarray(K_g, dtype=float)
@@ -531,13 +551,13 @@ def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any]
     return out
 
 
-def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True)
-    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)
+def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True, fft_params_by_expiry=fft_params_by_expiry)
+    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=fft_params_by_expiry)
     return prices, reg_delta, inverse_net_delta(reg_delta, prices)
 
 
-def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None, fft_params_lookup: dict[tuple[str, str], dict[Any, FFTParams]] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     out = options.copy()
     for model in MODELS:
         out[f"model_price_{model}"] = np.nan
@@ -548,6 +568,7 @@ def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[
     for (snapshot_ts, currency), idx in out.groupby(["snapshot_ts", "currency"], sort=True).groups.items():
         block = out.loc[list(idx)].copy()
         ts_iso = _iso_z(snapshot_ts)
+        block_fft_params = (fft_params_lookup or {}).get((ts_iso, str(currency).upper()))
         for model in MODELS:
             params = param_lookup.get((model, ts_iso, currency))
             if params is None:
@@ -557,7 +578,7 @@ def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[
                 continue
             error_msg = None
             try:
-                prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)
+                prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=block_fft_params)
                 out.loc[list(idx), f"model_price_{model}"] = prices
                 out.loc[list(idx), f"regular_delta_{model}"] = reg_delta
                 out.loc[list(idx), f"net_delta_{model}"] = net_delta
@@ -977,6 +998,7 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
         outer.set_description("combine options")
         options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)
         param_lookup = build_param_lookup(workbook)
+        fft_params_lookup = build_fft_params_lookup(workbook, cfg.fft_params)
         outer.update(1)
 
         outer.set_description("reprice and deltas")
@@ -992,6 +1014,7 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
                 delta_u_max=cfg.delta_u_max,
                 delta_quad_n=cfg.delta_quad_n,
                 progress=inner,
+                fft_params_lookup=fft_params_lookup,
             )
         finally:
             inner.close()
