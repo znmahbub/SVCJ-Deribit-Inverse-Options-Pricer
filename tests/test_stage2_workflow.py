@@ -26,7 +26,7 @@ class Stage2WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files").mkdir()
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_calibration_configs(root)
 
         self.assertEqual(set(configs), {"wls", "pwls"})
@@ -42,12 +42,13 @@ class Stage2WorkflowTests(unittest.TestCase):
         self.assertEqual(configs["wls"].output_xlsx.name, "calibration_wls.xlsx")
         self.assertEqual(configs["pwls"].output_xlsx.name, "calibration_pwls.xlsx")
         self.assertEqual(configs["wls"].output_xlsx.parent.name, "canonical")
+        self.assertEqual(configs["wls"].output_xlsx.parent.parent.name, "outputs")
 
     def test_explicit_date_bounds_remain_optional_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files").mkdir()
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_calibration_configs(
                 root,
                 start_dt="2026-01-01",
@@ -92,7 +93,7 @@ class Stage2WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files").mkdir()
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_calibration_configs(root, verbose=False)
             large_sentinel = {"train_data": pd.DataFrame({"x": range(1000)})}
             with patch.object(workflow, "run_all_snapshots_to_excel", return_value=large_sentinel) as mocked:
