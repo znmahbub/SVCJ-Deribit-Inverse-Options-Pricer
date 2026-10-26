@@ -4,6 +4,7 @@ on:
   push:
     branches: [stage2-canonical-notebooks]
     paths:
+      - 'requirements.txt'
       - 'notebooks/**'
       - 'tests/test_stage2_workflow.py'
       - 'tests/test_stage2_notebooks.py'
