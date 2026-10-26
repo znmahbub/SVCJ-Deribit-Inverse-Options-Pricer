@@ -19,18 +19,19 @@ from src.hedging_analysis import HedgingConfig, run_hedging_analysis
 from src import hedging_analytics as analytics
 
 from .stage2_workflow import (
+    CANONICAL_OUTPUT_SUBDIR,
     CANONICAL_PRICING_OUTPUT_SUBDIR,
     canonical_calibration_paths,
 )
 
 
-CANONICAL_HEDGING_REPORT_SUBDIR = Path("hedging_outputs") / "canonical"
-CANONICAL_FINAL_OUTPUT_SUBDIR = Path("final_outputs") / "canonical"
+CANONICAL_HEDGING_REPORT_SUBDIR = CANONICAL_OUTPUT_SUBDIR / "hedging"
+CANONICAL_FINAL_OUTPUT_SUBDIR = CANONICAL_OUTPUT_SUBDIR / "final"
 
 
 def canonical_hedging_paths(project_root: Path) -> dict[str, Path]:
     root = Path(project_root).resolve()
-    output_dir = root / "excel files" / "canonical"
+    output_dir = root / CANONICAL_OUTPUT_SUBDIR
     return {
         "wls": output_dir / "hedging_wls.xlsx",
         "pwls": output_dir / "hedging_pwls.xlsx",
