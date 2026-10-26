@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -102,6 +103,10 @@ class Stage2WorkflowTests(unittest.TestCase):
         self.assertTrue(all(isinstance(path, Path) for path in outputs.values()))
 
     def test_pricing_loader_is_hard_wired_to_test_data(self) -> None:
+        self.assertNotIn(
+            "evaluation_split",
+            inspect.signature(workflow.chapter3.load_baseline_workbook).parameters,
+        )
         sentinel = (
             pd.DataFrame({"timestamp": []}),
             pd.DataFrame({"timestamp": []}),
@@ -111,7 +116,7 @@ class Stage2WorkflowTests(unittest.TestCase):
         with patch.object(workflow.chapter3, "load_baseline_workbook", return_value=sentinel) as mocked:
             loaded = workflow.load_pricing_inputs(Path("example.xlsx"))
         self.assertEqual(loaded, sentinel)
-        mocked.assert_called_once_with(Path("example.xlsx"), evaluation_split="test")
+        mocked.assert_called_once_with(Path("example.xlsx"))
 
 
 if __name__ == "__main__":
