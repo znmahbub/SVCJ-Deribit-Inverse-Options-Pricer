@@ -16,7 +16,7 @@ class Stage3WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files" / "canonical").mkdir(parents=True)
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_hedging_configs(root)
 
         self.assertEqual(list(configs), ["pwls"])
@@ -31,7 +31,7 @@ class Stage3WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files" / "canonical").mkdir(parents=True)
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_hedging_configs(root, run_wls=True, run_pwls=True)
 
         self.assertEqual(list(configs), ["wls", "pwls"])
@@ -43,7 +43,7 @@ class Stage3WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir()
-            (root / "excel files" / "canonical").mkdir(parents=True)
+            (root / "outputs" / "canonical").mkdir(parents=True)
             configs = workflow.build_hedging_configs(root)
             configs["pwls"].calibration_xlsx.touch()
             with patch.object(workflow, "run_hedging_analysis", return_value={"large": pd.DataFrame({"x": range(10)})}) as mocked:
