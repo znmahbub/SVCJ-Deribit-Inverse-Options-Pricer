@@ -183,3 +183,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# One-shot trigger: this file deletes itself after a successful cleanup commit.
