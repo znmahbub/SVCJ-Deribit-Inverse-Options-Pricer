@@ -1,0 +1,29 @@
+name: temporary-source-suite
+
+on:
+  push:
+    branches:
+      - stage4-5-final-validation-cleanup
+    paths:
+      - .github/workflows/temporary-source-suite.yml
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage4-5-final-validation-cleanup
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - name: Hide diagnostic workflows and ensure generated notebook outputs are absent
+        run: |
+          rm -f .github/workflows/temporary-*.yml
+          rm -rf notebooks/pricing_outputs notebooks/hedging_outputs notebooks/final_outputs
+      - name: Run complete unit suite
+        run: python -m unittest discover -s tests -v
