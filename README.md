@@ -1,181 +1,153 @@
 # Deribit Inverse Options Pricer
 
-This repository studies and implements pricing, calibration, and hedging workflows for **Deribit inverse options**: options quoted against crypto futures but settled in the underlying coin rather than in USD. That settlement convention matters economically because option value, put-call parity, and hedge interpretation all live in a **coin numeraire**, not in a cash numeraire. The project therefore combines familiar option models with inverse-option pricing conventions:
+This repository implements pricing, calibration, and hedging workflows for **Deribit inverse options**: options quoted against crypto futures and settled in the underlying coin. The empirical workflow compares three models:
 
-- **Black / Black-76** for a liquid benchmark surface,
+- **Black / Black-76** as the benchmark,
 - **Heston** for stochastic volatility,
-- **SVCJ** for stochastic volatility with correlated jumps.
+- **SVCJ** for stochastic volatility with correlated price/variance jumps.
 
-The repo is built around one end-to-end problem: collect market snapshots, filter liquid quotes, calibrate the three models on inverse-option prices, persist results to Excel, analyze the fitted surfaces in notebooks, and evaluate hedging performance using perpetual futures data.
+The current paper workflow is deliberately narrow: validate the snapshot dataset, run two pre-specified calibration regimes, evaluate pricing on a deterministic test holdout, and then pass the resulting workbooks to the hedging/robustness stages.
 
-## What the project does
+## Canonical paper workflow
 
-At a high level, the workflow is:
+Run the maintained notebooks in this order:
 
-1. Collect Deribit option snapshots and futures marks.
-2. Filter snapshots down to liquid, model-usable option quotes.
-3. Price inverse options with a Carr-Madan FFT engine.
-4. Calibrate Black, Heston, and SVCJ by weighted least squares.
-5. Save parameters and repriced train/test panels to Excel workbooks.
-6. Produce chapter-style analysis figures/tables in notebooks.
-7. Reconstruct deltas, hedge intervals, and hedging diagnostics from the saved calibration outputs.
+1. `notebooks/00_check_data.ipynb` — inventory all option snapshots and fail fast on schema, timestamp, or BTC/ETH coverage problems.
+2. `notebooks/01_run_calibration.ipynb` — run the two fixed calibration specifications on the complete dataset.
+3. `notebooks/02_pricing_analysis.ipynb` — analyze only the untouched 30% test holdout and export pricing tables/figures.
+
+The two fixed specifications are:
+
+| Specification | Temporal penalty | Output workbook |
+| --- | ---: | --- |
+| WLS | `lambda_TS = 0` | `excel files/canonical/calibration_wls.xlsx` |
+| PWLS | `lambda_TS = 1` | `excel files/canonical/calibration_pwls.xlsx` |
+
+Both use the deterministic **70/30 train/test split** implemented in the core pipeline. There is no validation split in the canonical workflow and no regularization sweep or data-driven lambda selection. Calibration uses the 70% training subset; final pricing reporting reads the 30% test subset only.
+
+By default, `01_run_calibration.ipynb` sets:
+
+```python
+START_DT = None
+END_DT = None
+```
+
+so every snapshot currently present in `data/` is included. Explicit start/end dates remain available for bounded replication or robustness exercises, but they are not the default paper run.
+
+## Canonical outputs
+
+Calibration workbooks are written to:
+
+```text
+excel files/canonical/
+├── calibration_wls.xlsx
+└── calibration_pwls.xlsx
+```
+
+Pricing analysis is written to:
+
+```text
+notebooks/pricing_outputs/canonical/
+├── overall_metrics_by_specification.csv
+├── snapshot_win_rates_by_specification.csv
+├── wls/
+└── pwls/
+```
+
+Within each specification, the pricing report includes overall metrics, snapshot-level RMSE/MAE and within-spread diagnostics, equal-count maturity and moneyness buckets, SVCJ parameter summaries, and figures. BTC and ETH coin-denominated errors are reported separately; pooled cross-asset reporting uses unit-coherent USD-equivalent or spread-normalized errors rather than pooling raw BTC and ETH coin RMSE.
 
 ## Project structure
 
 ```text
 .
-├── src/                         # Runtime pricing, calibration, data, and hedging code
-├── notebooks/                   # Maintained thesis/reporting notebooks
-│   ├── _lib/                    # Shared notebook helper modules
-│   └── *.ipynb
-├── docs/                        # Code documentation, reproducibility notes, thesis materials
-├── data/                        # Snapshot CSVs and futures histories
-├── excel files/                 # Link to calibration and hedging Excel workbooks
-├── tests/                       # Regression, invariants, notebook, and I/O checks
-├── pricing_examples.ipynb       # Primary pricing walkthrough
-├── calibration_example.ipynb    # Primary single-snapshot calibration walkthrough
-├── README.md
+├── src/                         # Pricing, calibration, data and hedging runtime code
+├── notebooks/
+│   ├── 00_check_data.ipynb      # Canonical data pre-flight
+│   ├── 01_run_calibration.ipynb # Canonical WLS/PWLS runner
+│   ├── 02_pricing_analysis.ipynb# Canonical test-holdout pricing report
+│   ├── _lib/                    # Shared notebook workflow/report helpers
+│   └── ...                      # Legacy/provenance and later-stage notebooks
+├── data/                        # Option snapshots and futures histories
+├── excel files/                 # Generated/external workbook artifacts
+├── docs/                        # Methodology and reproducibility documentation
+├── tests/                       # Numerical, pipeline and notebook regressions
+├── pricing_examples.ipynb       # Standalone pricing walkthrough
+├── calibration_example.ipynb    # Standalone single-snapshot calibration walkthrough
 └── requirements.txt
 ```
 
-## How the project is organized
+## Core runtime modules
 
-- **Core pricing and calibration engine** — `src/inverse_fft_pricer.py`, `src/calibration.py`, `src/snapshot_job.py`, `src/results_store.py`, and `src/batch_runner.py` implement the numerical core and workbook pipeline.
-- **Analysis-window control** — `src/analysis_window.py` normalizes explicit UTC sample boundaries so a research run does not silently expand when new live snapshots are added.
-- **Data collection and market backfill** — `src/collect_deribit_snapshot.py` collects live Deribit snapshots; `src/backfill_futures_marks.py` reconstructs perpetual and term futures histories aligned to the snapshot set.
-- **Hedging pipeline** — `src/hedging_analysis.py` rebuilds model prices/deltas and creates interval hedging panels; `src/hedging_analytics.py` turns those outputs into chapter-ready tables and figures.
-- **Maintained notebook layer** — notebooks under `notebooks/` are the main reporting/orchestration layer for chapter 3 and chapter 4 outputs.
-- **Primary example notebooks** — `pricing_examples.ipynb` and `calibration_example.ipynb` are standalone walkthroughs for pricing and single-snapshot calibration.
-- **Documentation and generated artifacts** — `docs/` contains technical/reproducibility documentation and thesis materials, while `notebooks/chapter3_outputs/` and `hedging_output/hedging_chapter4/` contain generated reporting artifacts.
+- `src/inverse_fft_pricer.py` — characteristic functions, Carr-Madan FFT pricing, inverse-option conversion, and reference pricing routines.
+- `src/calibration.py` — liquid-quote filtering, residual scaling, parameter transforms, admissibility checks, and model calibration.
+- `src/snapshot_job.py` — one-snapshot orchestration, deterministic 70/30 split, training-only calibration, and repricing of train/test panels.
+- `src/results_store.py` — workbook schemas, append/load helpers, timestamp normalization, and atomic persistence.
+- `src/batch_runner.py` — chronological multi-snapshot orchestration, warm starts, resume behavior, and sequential temporal regularization.
+- `src/analysis_window.py` — optional inclusive UTC sample-window normalization.
+- `src/hedge_mapping.py` and `src/greeks.py` — centralized hedge-notional and delta identities.
+- `src/hedging_analysis.py` / `src/hedging_analytics.py` — hedging engine and reporting layer.
 
-## Runtime module guide (`src/`)
+## Notebook support code
 
-- `src/__init__.py` — package marker for the runtime code.
-- `src/analysis_window.py` — inclusive UTC analysis-window normalization/filtering used to freeze empirical paper samples.
-- `src/inverse_fft_pricer.py` — characteristic functions, Carr-Madan FFT grids, inverse-option call/put pricing, cache helpers, and reference Black/Heston pricing routines.
-- `src/calibration.py` — liquid-quote filtering, residual weighting, per-expiry pricing plans, vectorized repricing, parameter transforms, and model calibration.
-- `src/snapshot_job.py` — one-snapshot orchestration: load CSV, filter data, split train/test, calibrate all models, price the filtered panel, and assemble Excel-ready payloads.
-- `src/results_store.py` — workbook schema definitions, append/load helpers, timestamp normalization, latest-success lookup, and atomic workbook flushes.
-- `src/batch_runner.py` — multi-snapshot, multi-currency orchestration with resume logic, warm starts, explicit analysis-window filtering, chunking, and ordered workbook commits.
-- `src/collect_deribit_snapshot.py` — CLI collector for Deribit option snapshots and associated market data.
-- `src/backfill_futures_marks.py` — backfill utility for perpetual and term futures marks aligned to the existing snapshot set.
-- `src/hedging_analysis.py` — hedging engine that reloads calibration outputs, reconstructs prices/deltas, joins evaluation snapshots and perp data, and writes hedging workbooks.
-- `src/hedging_analytics.py` — analysis/figure layer for hedging results, including pooled summaries, equal-count buckets, and Plotly export helpers.
+- `notebooks/_lib/stage2_workflow.py` — canonical Stage 2 data checks, WLS/PWLS configuration, calibration orchestration, and pricing-report assembly.
+- `notebooks/_lib/common.py` — shared path resolution, display configuration, Plotly styling, and export helpers.
+- `notebooks/_lib/chapter3_final.py` — pricing metrics, buckets, figures, and parameter diagnostics reused by `02_pricing_analysis.ipynb`.
+- `notebooks/_lib/hedging_report.py` — export helpers for the hedging reporting stage.
 
-## Notebook and script guide
-
-### Primary example notebooks
-
-- `pricing_examples.ipynb` — compact demonstrations of inverse-option pricing under Black, Heston, and SVCJ.
-- `calibration_example.ipynb` — a single-snapshot calibration walkthrough showing filtering, train/test splitting, calibration, and repricing.
-
-### Maintained notebooks under `notebooks/`
-
-- `notebooks/calibrate_all_to_excel.ipynb` — short orchestration notebook for running the batch calibration pipeline to an Excel workbook.
-- `notebooks/calibration_analysis_complete_reg_0.ipynb`
-- `notebooks/calibration_analysis_complete_reg_1.ipynb`
-- `notebooks/calibration_analysis_complete_reg_3.ipynb`
-- `notebooks/calibration_analysis_complete_reg_5.ipynb`
-- `notebooks/calibration_analysis_complete_reg_10.ipynb`
-- `notebooks/calibration_analysis_complete_reg_50.ipynb`
-- `notebooks/calibration_analysis_complete_reg_100.ipynb` — chapter-3 calibration analysis notebooks for different regularization strengths.
-- `notebooks/calibration_analysis_complete_reg_250.ipynb`
-- `notebooks/calibration_analysis_complete_reg_500.ipynb`
-- `notebooks/calibration_analysis_complete_reg_1000.ipynb`
-- `notebooks/calibration_results_final.ipynb` — compact final chapter-3 reporting notebook that compares regularization choices and exports the main calibration figures/tables.
-- `notebooks/futures_plotly_viewer.ipynb` — interactive viewer for perpetual and term futures histories.
-- `notebooks/hedging_analytics.ipynb` — chapter-4 reporting notebook for pooled hedging metrics, time-series diagnostics, bucket analyses, and exports.
-
-### Notebook support code
-
-- `notebooks/sync_regularization_notebooks.py` — keeps the regularization notebook family synchronized to one maintained code-cell template.
-- `notebooks/_lib/common.py` — shared path resolution, Plotly styling, and export helpers.
-- `notebooks/_lib/chapter3_analysis.py` — shared logic used by the regularization analysis notebooks.
-- `notebooks/_lib/chapter3_final.py` — shared logic used by the final chapter-3 notebook.
-- `notebooks/_lib/futures_viewer.py` — loader, plotting, and diagnostics helpers for the futures viewer notebook.
-- `notebooks/_lib/hedging_report.py` — export glue for the hedging analytics notebook.
+The older `calibrate_all_to_excel.ipynb`, `calibration_analysis_complete_reg_*.ipynb`, `regularization_selection.ipynb`, and `calibration_results_final.ipynb` are retained for thesis/remediation provenance. They are **not** the canonical paper rerun interface.
 
 ## Setup
 
-Install the core pipeline dependencies:
+Create an environment and install the runtime/reporting dependencies:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate       # Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Current notebook/reporting workflows also assume a Jupyter + Plotly environment. Optional static image export from Plotly figures additionally requires `kaleido`.
-
-## Typical workflows
-
-### 1) Collect or refresh market data
+To execute notebooks, install Jupyter tooling if it is not already present:
 
 ```bash
-python -m src.collect_deribit_snapshot --currency BOTH --outdir data
+pip install jupyter ipykernel
 ```
 
-For futures-history reconstruction aligned to the snapshot set:
+Plotly is included in `requirements.txt`. Static PNG export is optional and additionally requires `kaleido`; HTML figure export works without it.
+
+## Data and calibration details
+
+The canonical data check expects every `deribit_options_snapshot_*.csv` to contain the calibration-required fields and both BTC and ETH rows. The calibration filters then apply the model-useability rules in the runtime pipeline, including bid/ask availability, time-to-maturity, open-interest, relative-spread, and moneyness constraints.
+
+The weighted least-squares residual is scaled by the quoted spread. With `spread_power=1`, residuals are divided by spread, so the squared objective is effectively inverse-spread-squared. PWLS adds the fixed transformed-parameter temporal penalty with `lambda_TS = 1`; each currency is therefore processed chronologically so snapshot `t+1` uses the successful parameters from snapshot `t`.
+
+`run_calibration_suite()` intentionally discards the large in-memory workbook object after each specification has been persisted and returns only the two output paths. This keeps the full-sample WLS→PWLS rerun memory-bounded.
+
+## Pricing-report conventions
+
+`02_pricing_analysis.ipynb` loads `test_data` explicitly. It does not inspect a validation set or select between WLS and PWLS using test performance; both fixed specifications are reported.
+
+For SVCJ, `rho_j` is treated as an **unbounded jump-size loading**, not as a Pearson correlation coefficient. Canonical parameter diagnostics therefore do not impose or plot artificial ±0.95 boundaries for `rho_j`; the usual correlation boundary diagnostic is retained only for the Heston/SVCJ spot-variance correlation parameter `rho`.
+
+## Tests
+
+The repository contains numerical invariants, calibration-objective tests, deterministic splitting tests, workbook I/O tests, provenance checks, and notebook smoke tests. The Stage 2 notebooks are smoke-tested against temporary synthetic snapshot/workbook fixtures so CI verifies the interfaces without launching the full historical calibration.
+
+Run the full suite with:
 
 ```bash
-python -m src.backfill_futures_marks --data-dir data
+python -m unittest discover -s tests -v
 ```
 
-### 2) Run calibration
+## Legacy and reproducibility material
 
-- For a single snapshot with full control, use `src.snapshot_job.process_snapshot_to_payload(...)`.
-- For a full batch run to Excel, use `src.batch_runner.run_all_snapshots_to_excel(...)` or the notebook `notebooks/calibrate_all_to_excel.ipynb`.
+- `docs/reproducibility/remediation_baseline.md` — pre-remediation result/sample provenance.
+- `docs/reproducibility/thesis_sample_manifest.csv` — submitted-thesis sample manifest.
+- `docs/Pricing and Hedging Deribit Inverse Options under Affine Stochastic Volatility Models with Jumps.pdf` — submitted thesis baseline.
+- `docs/superpowers/` — remediation design and implementation notes.
 
-The `data/` directory is live and can contain observations collected after a research sample closes. Paper/thesis reruns must therefore set an explicit window. The submitted-thesis sample is frozen to the first/last snapshot filenames recorded in `docs/reproducibility/remediation_baseline.md`:
-
-```python
-from pathlib import Path
-from src.batch_runner import BatchConfig
-
-cfg = BatchConfig(
-    project_root=Path("."),
-    analysis_start="2025-12-30T17:31:15Z",
-    analysis_end="2026-04-08T10:01:19Z",
-)
-```
-
-Analysis-window filtering occurs before resume logic and smoke-test truncation. Date-only end values are interpreted as inclusive UTC calendar dates.
-
-The main calibration outputs are Excel workbooks such as:
-
-- `excel files/calibration_results_reg_0.xlsx`
-- `excel files/calibration_results_reg_1.xlsx`
-- `excel files/calibration_results_reg_3.xlsx`
-- `excel files/calibration_results_reg_5.xlsx`
-- `excel files/calibration_results_reg_10.xlsx`
-- `excel files/calibration_results_reg_25.xlsx`
-- `excel files/calibration_results_reg_50.xlsx`
-- `excel files/calibration_results_reg_100.xlsx`
-- `excel files/calibration_results_reg_250.xlsx`
-- `excel files/calibration_results_reg_500.xlsx`
-- `excel files/calibration_results_reg_1000.xlsx`
-
-Large workbook artifacts are stored externally; see `excel files/link.txt`.
-
-### 3) Analyze calibration outputs
-
-Use the chapter-3 notebooks in `notebooks/` to inspect fit quality, regularization trade-offs, bucket diagnostics, and parameter stability. Generated artifacts are written to `notebooks/chapter3_outputs/`.
-
-### 4) Run and analyze hedging outputs
-
-- Use `src.hedging_analysis.run_hedging_analysis(...)` for the hedging engine.
-- Use `notebooks/hedging_analytics.ipynb` for the chapter-4 tables/figures and export flow.
-
-Generated hedging artifacts are written to `hedging_output/hedging_chapter4/`.
-
-## Documentation
-
-- `docs/code_documentation.md` — technical documentation for runtime modules, notebook support code, orchestration scripts, and tests.
-- `docs/reproducibility/remediation_baseline.md` — immutable pre-remediation sample/result provenance.
-- `docs/reproducibility/thesis_sample_manifest.csv` — compact manifest pinning the submitted-thesis sample index.
-- `docs/Pricing and Hedging Deribit Inverse Options under Affine Stochastic Volatility Models with Jumps.pdf` — submitted thesis PDF used as the pre-remediation manuscript baseline.
-- `docs/superpowers/` — the remediation design and implementation plan.
+Large historical Excel artifacts are stored externally; see `excel files/link.txt` where applicable.
 
 ## Perpetual hedge price provenance
 
-The historical hedge input in `data/perpetual_futures_prices.csv` is a **price proxy**, not an exchange-provided historical Deribit mark series. New backfills use the neutral field `perp_futures_price_proxy`: the closer in timestamp of the open or close of the matched Deribit TradingView candle (one-minute resolution in the thesis baseline), subject to the configured maximum-gap filter. `price_source`, `price_kind`, `candle_price_choice`, `candle_price_gap_seconds`, and `candle_resolution` preserve the provenance/alignment diagnostics. `src.hedging_analysis.load_perp_history` still reads the old `perp_futures_mark_price` field for legacy workbooks, but explicitly labels and warns about that schema.
+The historical hedge input in `data/perpetual_futures_prices.csv` is a **price proxy**, not an exchange-provided historical Deribit mark series. New backfills use `perp_futures_price_proxy`: the closer-in-time open or close of the matched Deribit TradingView candle, subject to the configured maximum-gap filter. Provenance fields record source, price kind, candle choice, time gap, and resolution. Legacy `perp_futures_mark_price` files remain readable but are explicitly labeled as legacy by the hedging loader.
