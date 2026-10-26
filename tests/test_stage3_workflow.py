@@ -45,6 +45,7 @@ class Stage3WorkflowTests(unittest.TestCase):
             (root / "data").mkdir()
             (root / "excel files" / "canonical").mkdir(parents=True)
             configs = workflow.build_hedging_configs(root)
+            configs["pwls"].calibration_xlsx.touch()
             with patch.object(workflow, "run_hedging_analysis", return_value={"large": pd.DataFrame({"x": range(10)})}) as mocked:
                 paths = workflow.run_hedging_suite(configs)
 
