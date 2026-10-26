@@ -34,7 +34,6 @@ jobs:
                   raise SystemExit(f'expected text not found in {path}: {old[:80]!r}')
               p.write_text(text.replace(old, new), encoding='utf-8')
 
-          # Core pricer documentation: describe the futures-price formulation directly.
           replace(
               'src/inverse_fft_pricer.py',
               'under the pricing measure ``Q`` for which\n    the futures price is a martingale under the maintained deterministic/zero-\n    discounting setup.  These functions are vectorised',
@@ -66,7 +65,6 @@ jobs:
           )
           p.write_text(text, encoding='utf-8')
 
-          # Code documentation: retain only identification diagnostics.
           p = Path('docs/code_documentation.md')
           text = p.read_text(encoding='utf-8')
           text = text.replace(
@@ -87,7 +85,6 @@ jobs:
           )
           p.write_text(text, encoding='utf-8')
 
-          # Design specification: remove the discarded experiment from scope and decisions.
           p = Path('docs/superpowers/specs/2026-10-13-paper-code-remediation-design.md')
           text = p.read_text(encoding='utf-8')
           text = text.replace(
@@ -107,7 +104,6 @@ jobs:
           text = text.replace('### 11. Code first, manuscript second, final rerun last', '### 10. Code first, manuscript second, final rerun last')
           p.write_text(text, encoding='utf-8')
 
-          # Implementation plan: Task 12 is identification-only and no later task refers to the discarded experiment.
           p = Path('docs/superpowers/plans/2026-10-13-paper-code-remediation.md')
           text = p.read_text(encoding='utf-8')
           text = text.replace('| Zero-discount assumption needs robustness | 12, 13 |\n', '')
@@ -135,7 +131,6 @@ jobs:
           p.write_text(text, encoding='utf-8')
           PY
 
-          # Tracked interpreter caches are generated junk and can retain stale strings.
           find . -type d -name '__pycache__' -prune -exec rm -rf {} +
           rm -f .github/workflows/discount-removal-audit.yml
           rm -f .github/workflows/remove-discounting-remnants.yml
@@ -144,7 +139,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nbformat
+          pip install nbformat nbclient jupyter-client
       - name: Run targeted tests
         run: |
           python -m unittest tests.test_robustness_helpers tests.test_notebook_integrity tests.test_notebook_structure tests.test_measure_delta_identities tests.test_sanity_pricing -v
