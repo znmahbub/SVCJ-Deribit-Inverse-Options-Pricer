@@ -5,9 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
+
 from tests._path import ROOT  # noqa: F401
 from notebooks._lib import stage2_workflow
 from src import batch_runner
+from src.results_store import init_empty_workbook
 
 
 class _FakeBar:
@@ -79,6 +82,61 @@ class CalibrationProgressTests(unittest.TestCase):
         self.assertEqual(created[1].total, 4)
         self.assertEqual(created[1].n, 1)
         self.assertTrue(all(bar.closed for bar in created))
+
+    def test_currency_runner_emits_snapshot_progress_and_suppresses_worker_chatter(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            files = []
+            for stamp in ("20260101T000000Z", "20260101T010000Z"):
+                path = data_dir / f"deribit_options_snapshot_{stamp}.csv"
+                path.write_text("x\n1\n", encoding="utf-8")
+                files.append(path)
+
+            cfg = batch_runner.BatchConfig(
+                project_root=root,
+                data_dir=data_dir,
+                output_xlsx=root / "out.xlsx",
+                resume=False,
+                save_every_n_files=10,
+                n_workers=1,
+                currencies=("BTC", "ETH"),
+                show_progress=True,
+                progress_label="WLS",
+                verbose=True,
+            )
+            events = []
+            observed_verbose = []
+
+            def fake_process(path, **kwargs):
+                observed_verbose.append(kwargs["verbose"])
+                ts = batch_runner.timestamp_from_filename(path)
+                ts_iso = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+                base = pd.DataFrame([{"timestamp": ts_iso, "currency": "BTC", "success": True}])
+                return {
+                    "timestamp_iso": ts_iso,
+                    "timestamp": ts,
+                    "currency": "BTC",
+                    "param_rows": {"black": base, "heston": base, "svcj": base},
+                    "train_df": pd.DataFrame(),
+                    "test_df": pd.DataFrame(),
+                    "warm_next": {},
+                }
+
+            with patch.object(batch_runner, "process_snapshot_to_payload", side_effect=fake_process), patch.object(
+                batch_runner, "flush_currency_checkpoint"
+            ):
+                batch_runner.run_currency_to_excel(
+                    "BTC",
+                    cfg=cfg,
+                    workbook=init_empty_workbook(),
+                    progress_callback=events.append,
+                )
+
+        self.assertEqual(events[0], ("total", "BTC", 2))
+        self.assertEqual(events.count(("advance", "BTC", 1)), 2)
+        self.assertEqual(observed_verbose, [False, False])
 
     def test_outer_specification_progress_bar_is_not_rendered(self) -> None:
         import inspect
