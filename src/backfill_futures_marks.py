@@ -378,12 +378,49 @@ def build_term_incremental(term_requests: pd.DataFrame, existing_term: pd.DataFr
 
 
 def _normalize_existing_perp(existing_perp: pd.DataFrame) -> pd.DataFrame:
+    """Normalize legacy and current perpetual rows to the canonical proxy schema."""
     out = existing_perp.copy()
-    if not out.empty:
-        if "timestamp" in out.columns and "obs_datetime" not in out.columns:
-            out["obs_datetime"] = out["timestamp"]
-        if "currency" in out.columns and "coin" not in out.columns:
-            out["coin"] = out["currency"]
+    if "timestamp" in out.columns and "obs_datetime" not in out.columns:
+        out["obs_datetime"] = out["timestamp"]
+    if "currency" in out.columns and "coin" not in out.columns:
+        out["coin"] = out["currency"]
+
+    legacy_price = (
+        pd.to_numeric(out["perp_futures_mark_price"], errors="coerce")
+        if "perp_futures_mark_price" in out.columns
+        else pd.Series(np.nan, index=out.index, dtype=float)
+    )
+    if "perp_futures_price_proxy" in out.columns:
+        proxy = pd.to_numeric(out["perp_futures_price_proxy"], errors="coerce")
+        out["perp_futures_price_proxy"] = proxy.where(proxy.notna(), legacy_price)
+    else:
+        out["perp_futures_price_proxy"] = legacy_price
+
+    data_source = (
+        out["data_source"].astype("string")
+        if "data_source" in out.columns
+        else pd.Series(pd.NA, index=out.index, dtype="string")
+    )
+    inferred_source = data_source.replace(
+        {
+            "tradingview_chart_open_close_nearest": "deribit_tradingview_chart",
+            "deribit_snapshot": "deribit_snapshot",
+            "skipped": "skipped",
+        }
+    )
+    if "price_source" in out.columns:
+        current = out["price_source"].astype("string")
+        out["price_source"] = current.where(current.notna(), inferred_source)
+    else:
+        out["price_source"] = inferred_source
+
+    inferred_kind = pd.Series("nearest_1m_candle_open_close", index=out.index, dtype="string")
+    inferred_kind = inferred_kind.where(~data_source.eq("deribit_snapshot"), "direct_perpetual_mark")
+    if "price_kind" in out.columns:
+        current_kind = out["price_kind"].astype("string")
+        out["price_kind"] = current_kind.where(current_kind.notna(), inferred_kind)
+    else:
+        out["price_kind"] = inferred_kind
     return out
 
 
@@ -429,6 +466,8 @@ def build_perp_incremental(combos: pd.DataFrame, existing_perp: pd.DataFrame, sk
                 fallback_new["perp_futures_best_bid"] = pd.NA
                 fallback_new["perp_futures_best_ask"] = pd.NA
                 fallback_new["data_source"] = "tradingview_chart_open_close_nearest"
+    direct = _normalize_existing_perp(direct)
+    fallback_new = _normalize_existing_perp(fallback_new)
     new_parts = [df for df in (direct, fallback_new) if not df.empty]
     appended = pd.concat(new_parts, ignore_index=True, sort=False) if new_parts else pd.DataFrame()
     if not appended.empty:
