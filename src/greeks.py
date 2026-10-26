@@ -1,9 +1,8 @@
 """Centralized Greek identities for the inverse-option hedging pipeline.
 
 The pricing characteristic functions are defined under a measure Q under which
-F_t is a martingale in the maintained deterministic/zero-discounting setup.
-The regular call delta is the Q^F probability obtained by changing numeraire
-to the futures price:
+the dated futures price F_t is a martingale. The regular call delta is the Q^F
+probability obtained by changing numeraire to the futures price:
 
     phi_{Q^F}(u) = phi_Q(u-i) / phi_Q(-i).
 
