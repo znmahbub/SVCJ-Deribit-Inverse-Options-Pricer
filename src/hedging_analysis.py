@@ -846,7 +846,7 @@ def make_summary_tables_from_panel(panel: pd.DataFrame) -> dict[str, pd.DataFram
 def prepare_output_option_sheets(
     options: pd.DataFrame,
     workbook: dict[str, pd.DataFrame],
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     enriched = options.copy()
 
     def one(split: str, sheet: str) -> pd.DataFrame:
@@ -865,7 +865,6 @@ def prepare_output_option_sheets(
 
     return (
         one("train", TRAIN_SHEET),
-        one("validation", VALIDATION_SHEET),
         one("test", TEST_SHEET),
     )
 
@@ -943,7 +942,7 @@ def _write_df_to_sheet_chunked(wb: Workbook, sheet_name: str, df: pd.DataFrame) 
         _style_sheet(ws)
 
 
-def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], train_data: pd.DataFrame, validation_data: pd.DataFrame, test_data: pd.DataFrame, price_verification: pd.DataFrame, interval_panel: pd.DataFrame, summary_tables: dict[str, pd.DataFrame], notes: pd.DataFrame) -> None:
+def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], train_data: pd.DataFrame, test_data: pd.DataFrame, price_verification: pd.DataFrame, interval_panel: pd.DataFrame, summary_tables: dict[str, pd.DataFrame], notes: pd.DataFrame) -> None:
     wb = Workbook()
     wb.remove(wb.active)
     ordered = [
@@ -951,7 +950,6 @@ def write_hedge_workbook(output_path: Path, workbook: dict[str, pd.DataFrame], t
         ("heston_params", workbook["heston_params"].copy()),
         ("svcj_params", workbook["svcj_params"].copy()),
         (TRAIN_SHEET, train_data),
-        (VALIDATION_SHEET, validation_data),
         (TEST_SHEET, test_data),
         ("hedge_interval_panel", interval_panel),
         ("hedge_summary_overall", summary_tables["hedge_summary_overall"]),
@@ -1021,17 +1019,16 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
 
         outer.set_description("summaries")
         summary_tables = make_summary_tables_from_panel(interval_panel)
-        train_data, validation_data, test_data = prepare_output_option_sheets(options, workbook)
+        train_data, test_data = prepare_output_option_sheets(options, workbook)
         notes = make_notes(cfg, interval_panel, perp, funding, used_perp_file, used_funding_file)
         outer.update(1)
 
         outer.set_description("write workbook")
-        write_hedge_workbook(cfg.output_xlsx, workbook, train_data, validation_data, test_data, price_verification, interval_panel, summary_tables, notes)
+        write_hedge_workbook(cfg.output_xlsx, workbook, train_data, test_data, price_verification, interval_panel, summary_tables, notes)
         outer.update(1)
 
         return {
             TRAIN_SHEET: train_data,
-            VALIDATION_SHEET: validation_data,
             TEST_SHEET: test_data,
             "price_verification": price_verification,
             "hedge_interval_panel": interval_panel,
