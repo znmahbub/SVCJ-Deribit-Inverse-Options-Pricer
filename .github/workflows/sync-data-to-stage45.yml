@@ -1,0 +1,52 @@
+name: sync-data-to-stage45
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run after the final daily option snapshot on main.
+    - cron: "30 22 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-data-to-stage45
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Checkout Stage 4/5
+        uses: actions/checkout@v4
+        with:
+          ref: stage4-5-final-validation-cleanup
+          path: stage45
+          fetch-depth: 0
+
+      - name: Mirror data folder
+        run: |
+          rsync -a --delete main/data/ stage45/data/
+
+      - name: Commit synchronized data
+        working-directory: stage45
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A data
+
+          if git diff --cached --quiet; then
+            echo "Data already synchronized"
+            exit 0
+          fi
+
+          git commit -m "Sync data from main"
+          git push origin HEAD:stage4-5-final-validation-cleanup
