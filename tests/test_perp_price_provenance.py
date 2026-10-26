@@ -41,6 +41,26 @@ class PerpetualPriceProvenanceTests(unittest.TestCase):
         self.assertEqual(str(out.loc[0, "proxy_resolution"]), "1")
         self.assertFalse(bool(out.loc[0, "legacy_price_schema"]))
 
+    def test_perp_timestamps_are_normalized_to_snapshot_second_precision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pd.DataFrame(
+                {
+                    "obs_datetime": ["2026-01-01T00:00:00.944181Z"],
+                    "coin": ["BTC"],
+                    "perp_futures_price_proxy": [100_000.0],
+                    "price_source": ["deribit_tradingview_chart"],
+                    "price_kind": ["nearest_1m_candle_open_close"],
+                }
+            ).to_csv(root / "perpetual_futures_prices.csv", index=False)
+
+            out, _ = load_perp_history(root)
+
+        self.assertEqual(
+            out.loc[0, "timestamp"],
+            pd.Timestamp("2026-01-01T00:00:00Z"),
+        )
+
     def test_legacy_mark_schema_loads_with_warning_and_is_labeled_legacy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
