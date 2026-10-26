@@ -13,6 +13,7 @@ from shutil import copy2
 from typing import Mapping
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from src.hedging_analysis import HedgingConfig, run_hedging_analysis
 from src import hedging_analytics as analytics
@@ -86,7 +87,8 @@ def build_hedging_configs(
 def run_hedging_suite(configs: Mapping[str, HedgingConfig]) -> dict[str, Path]:
     """Run requested hedging specs and retain only persisted workbook paths."""
     output_paths: dict[str, Path] = {}
-    for key, cfg in configs.items():
+    items = list(configs.items())
+    for key, cfg in tqdm(items, desc="Hedging specifications", unit="spec", dynamic_ncols=True):
         if not cfg.calibration_xlsx.exists():
             raise FileNotFoundError(
                 f"Calibration workbook not found for {key}: {cfg.calibration_xlsx}. "
@@ -255,7 +257,8 @@ def run_hedging_reporting(
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     reports: dict[str, dict[str, object]] = {}
-    for key, workbook in hedging_workbooks.items():
+    items = list(hedging_workbooks.items())
+    for key, workbook in tqdm(items, desc="Hedging reports", unit="report", dynamic_ncols=True):
         reports[key] = build_hedging_report(
             Path(workbook),
             output_root / key,
@@ -275,9 +278,8 @@ def _copy_artifacts(
 ) -> None:
     if not source_root.exists():
         return
-    for source in sorted(source_root.rglob(f"*{suffix}")):
-        if not source.is_file():
-            continue
+    sources = [source for source in sorted(source_root.rglob(f"*{suffix}")) if source.is_file()]
+    for source in tqdm(sources, desc=f"Copying {artifact_type}", unit="file", dynamic_ncols=True):
         relative = source.relative_to(source_root)
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
