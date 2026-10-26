@@ -1,0 +1,34 @@
+name: stage1-core-tests
+
+on:
+  push:
+    branches: [stage1-70-30-core]
+    paths:
+      - 'src/**'
+      - 'tests/test_snapshot_splitting.py'
+      - 'tests/test_results_store_io.py'
+      - 'tests/test_batch_regularization_sequence.py'
+      - '.github/workflows/stage1-core-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage1-70-30-core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Run Stage 1 targeted tests
+        run: >-
+          python -m unittest
+          tests.test_snapshot_splitting
+          tests.test_results_store_io
+          tests.test_batch_regularization_sequence
+          tests.test_analysis_window
+          -v
