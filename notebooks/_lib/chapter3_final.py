@@ -636,7 +636,6 @@ def compute_parameter_summary(svcj_params: pd.DataFrame, output_dir: Path) -> pd
             row[f"{param}_iqr"] = float(group[param].quantile(0.75) - group[param].quantile(0.25))
             row[f"{param}_mad_diff"] = float(ordered[param].diff().abs().median())
         row["rho_boundary_share"] = float((group["rho"].abs() > 0.95).mean())
-        row["rhoj_boundary_share"] = float((group["rho_j"].abs() > 0.95).mean())
         row["feller_violation_share"] = float((group["feller_gap"] < 0).mean())
         row["corr_theta_v0"] = float(group[["theta", "v0"]].corr().iloc[0, 1])
         row["corr_kappa_theta"] = float(group[["kappa", "theta"]].corr().iloc[0, 1])
@@ -678,7 +677,7 @@ def plot_parameter_paths(
             row=row,
             col=col,
         )
-        if param in {"rho", "rho_j"}:
+        if param == "rho":
             fig.add_hline(y=0.95, line_dash="dot", line_color="#9ca3af", row=row, col=col)
             fig.add_hline(y=-0.95, line_dash="dot", line_color="#9ca3af", row=row, col=col)
     style_figure(fig, height=350 * n_rows, title=title, hovermode="x unified")
