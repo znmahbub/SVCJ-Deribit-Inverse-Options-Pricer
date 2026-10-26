@@ -4,7 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from tests._path import ROOT
@@ -47,8 +46,10 @@ def write_pricing_workbook(path: Path, *, price_shift: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     param_rows = []
     option_rows = []
+    # Excel stores datetimes without timezone metadata. The production loader
+    # restores UTC explicitly, so the smoke fixture mirrors the persisted form.
     for currency, forward in [("BTC", 100.0), ("ETH", 10.0)]:
-        for i, ts in enumerate(pd.date_range("2026-01-01", periods=3, tz="UTC", freq="h")):
+        for i, ts in enumerate(pd.date_range("2026-01-01", periods=3, freq="h")):
             param_rows.append(
                 {
                     "timestamp": ts,
