@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  commit-grid-fix:
+  fix-perp-schema:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,38 +22,32 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
-      - name: Apply frozen-grid reuse
+      - name: Canonicalize perpetual proxy output schema
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('src/hedging_analysis.py')
+          p = Path('src/backfill_futures_marks.py')
           s = p.read_text(encoding='utf-8')
-          replacements = [
-            ('from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj', 'from src.inverse_fft_pricer import FFTParams, center_fft_params_on_strikes, cf_heston, cf_svcj'),
-            ('def build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str, str], dict[str, Any]]:\n', '''def build_fft_params_lookup(\n    workbook: dict[str, pd.DataFrame],\n    fft_params_base: FFTParams,\n) -> dict[tuple[str, str], dict[Any, FFTParams]]:\n    \"\"\"Reconstruct the frozen per-expiry FFT grids used during calibration.\"\"\"\n    full = combine_option_sheets(workbook, splits=(\"train\", \"test\"))\n    lookup: dict[tuple[str, str], dict[Any, FFTParams]] = {}\n    if full.empty:\n        return lookup\n    for (snapshot_ts, currency), block in full.groupby([\"snapshot_ts\", \"currency\"], sort=True):\n        grids: dict[Any, FFTParams] = {}\n        for expiry, expiry_block in block.groupby(\"expiry_datetime\", sort=False):\n            strikes = _num(expiry_block[\"strike\"]).to_numpy(dtype=float)\n            strikes = strikes[np.isfinite(strikes) & (strikes > 0)]\n            if strikes.size:\n                grids[expiry] = center_fft_params_on_strikes(fft_params_base, strikes)\n        lookup[(_iso_z(snapshot_ts), str(currency).upper())] = grids\n    return lookup\n\n\ndef build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str, str], dict[str, Any]]:\n'''),
-            ('def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True) -> np.ndarray:', 'def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:'),
-            ('pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)\n    _price_with_plan(pricing_plan, model=model.lower(), params=params, out_prices=live_prices, use_cache=use_cache)', 'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)\n    _price_with_plan(pricing_plan, model=model.lower(), params=params, out_prices=live_prices, use_cache=use_cache)'),
-            ('def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> np.ndarray:', 'def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:'),
-            ('pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)\n    live_positions = np.flatnonzero(live)', 'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)\n    live_positions = np.flatnonzero(live)'),
-            ('def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> tuple[np.ndarray, np.ndarray, np.ndarray]:\n    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True)\n    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)', 'def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:\n    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True, fft_params_by_expiry=fft_params_by_expiry)\n    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=fft_params_by_expiry)'),
-            ('def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:', 'def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None, fft_params_lookup: dict[tuple[str, str], dict[Any, FFTParams]] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:'),
-            ('        ts_iso = _iso_z(snapshot_ts)\n        for model in MODELS:', '        ts_iso = _iso_z(snapshot_ts)\n        block_fft_params = (fft_params_lookup or {}).get((ts_iso, str(currency).upper()))\n        for model in MODELS:'),
-            ('prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)', 'prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=block_fft_params)'),
-            ('        options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)\n        param_lookup = build_param_lookup(workbook)', '        options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)\n        param_lookup = build_param_lookup(workbook)\n        fft_params_lookup = build_fft_params_lookup(workbook, cfg.fft_params)'),
-            ('                progress=inner,\n            )', '                progress=inner,\n                fft_params_lookup=fft_params_lookup,\n            )'),
-          ]
-          for old,new in replacements:
-              if s.count(old) != 1:
-                  raise RuntimeError(f'expected one match, got {s.count(old)}: {old[:80]}')
-              s=s.replace(old,new)
-          p.write_text(s,encoding='utf-8')
+          old = '''def _normalize_existing_perp(existing_perp: pd.DataFrame) -> pd.DataFrame:\n    out = existing_perp.copy()\n    if not out.empty:\n        if "timestamp" in out.columns and "obs_datetime" not in out.columns:\n            out["obs_datetime"] = out["timestamp"]\n        if "currency" in out.columns and "coin" not in out.columns:\n            out["coin"] = out["currency"]\n    return out\n'''
+          new = '''def _normalize_existing_perp(existing_perp: pd.DataFrame) -> pd.DataFrame:\n    \"\"\"Normalize legacy and current perpetual rows to the canonical proxy schema.\"\"\"\n    out = existing_perp.copy()\n    if "timestamp" in out.columns and "obs_datetime" not in out.columns:\n        out["obs_datetime"] = out["timestamp"]\n    if "currency" in out.columns and "coin" not in out.columns:\n        out["coin"] = out["currency"]\n\n    legacy_price = (\n        pd.to_numeric(out["perp_futures_mark_price"], errors="coerce")\n        if "perp_futures_mark_price" in out.columns\n        else pd.Series(np.nan, index=out.index, dtype=float)\n    )\n    if "perp_futures_price_proxy" in out.columns:\n        proxy = pd.to_numeric(out["perp_futures_price_proxy"], errors="coerce")\n        out["perp_futures_price_proxy"] = proxy.where(proxy.notna(), legacy_price)\n    else:\n        out["perp_futures_price_proxy"] = legacy_price\n\n    data_source = (\n        out["data_source"].astype("string")\n        if "data_source" in out.columns\n        else pd.Series(pd.NA, index=out.index, dtype="string")\n    )\n    inferred_source = data_source.replace(\n        {\n            "tradingview_chart_open_close_nearest": "deribit_tradingview_chart",\n            "deribit_snapshot": "deribit_snapshot",\n            "skipped": "skipped",\n        }\n    )\n    if "price_source" in out.columns:\n        current = out["price_source"].astype("string")\n        out["price_source"] = current.where(current.notna(), inferred_source)\n    else:\n        out["price_source"] = inferred_source\n\n    inferred_kind = pd.Series("nearest_1m_candle_open_close", index=out.index, dtype="string")\n    inferred_kind = inferred_kind.where(~data_source.eq("deribit_snapshot"), "direct_perpetual_mark")\n    if "price_kind" in out.columns:\n        current_kind = out["price_kind"].astype("string")\n        out["price_kind"] = current_kind.where(current_kind.notna(), inferred_kind)\n    else:\n        out["price_kind"] = inferred_kind\n    return out\n'''
+          if s.count(old) != 1:
+              raise RuntimeError(f'normalize helper match count={s.count(old)}')
+          s = s.replace(old, new)
+          old2 = '''    new_parts = [df for df in (direct, fallback_new) if not df.empty]\n'''
+          new2 = '''    direct = _normalize_existing_perp(direct)\n    fallback_new = _normalize_existing_perp(fallback_new)\n    new_parts = [df for df in (direct, fallback_new) if not df.empty]\n'''
+          if s.count(old2) != 1:
+              raise RuntimeError(f'new_parts match count={s.count(old2)}')
+          s = s.replace(old2, new2)
+          p.write_text(s, encoding='utf-8')
           PY
-      - name: Verify regression
+      - name: Verify provenance contract
+        run: python -m unittest tests.test_perp_price_provenance -v
+      - name: Verify mini pipeline remains green
         run: python -m unittest tests.test_mini_pipeline.TestMiniCanonicalPipeline.test_synthetic_snapshot_to_final_artifact_assembly -v
       - name: Commit fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/hedging_analysis.py
-          git commit -m "fix: reuse calibration FFT grids in hedging"
+          git add src/backfill_futures_marks.py
+          git commit -m "fix: emit canonical perpetual proxy schema"
           git push origin HEAD:stage4-5-final-validation-cleanup
