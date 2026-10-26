@@ -30,10 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt nbconvert nbclient ipykernel
 
-      - name: Run complete unit suite on clean repository view
+      - name: Run complete unit suite on intended workflow-free repository view
         run: |
-          rm -f .github/workflows/temporary-e2e-notebook-smoke.yml
-          rm -f .github/workflows/temporary-e2e-notebook-smoke-v2.yml
+          rm -f .github/workflows/*.yml .github/workflows/*.yaml
           python -m unittest discover -s tests -v
 
       - name: Prepare two real snapshots
