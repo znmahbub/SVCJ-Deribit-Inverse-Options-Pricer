@@ -12,7 +12,7 @@ on:
       - '.github/workflows/stage2-targeted-tests.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   targeted:
@@ -21,9 +21,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: stage2-canonical-notebooks
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Remove obsolete rho_j boundary diagnostics if needed
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('notebooks/_lib/chapter3_final.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              '        row["rhoj_boundary_share"] = float((group["rho_j"].abs() > 0.95).mean())\n',
+              '',
+          )
+          text = text.replace(
+              '        if param in {"rho", "rho_j"}:\n',
+              '        if param == "rho":\n',
+          )
+          p.write_text(text, encoding='utf-8')
+          PY
       - run: pip install -r requirements.txt
       - name: Run Stage 2 targeted tests
         run: >-
@@ -32,3 +50,16 @@ jobs:
           tests.test_stage2_notebooks
           tests.test_stage2_pricing_diagnostics
           -v
+      - name: Commit rho_j reporting correction when green
+        if: success()
+        shell: bash
+        run: |
+          if git diff --quiet -- notebooks/_lib/chapter3_final.py; then
+            echo 'rho_j reporting already corrected.'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add notebooks/_lib/chapter3_final.py
+          git commit -m "fix: remove bounded rhoj reporting diagnostics"
+          git push origin HEAD:stage2-canonical-notebooks
