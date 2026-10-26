@@ -154,7 +154,7 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
                 output_xlsx=hedging_xlsx,
                 analysis_start="2026-01-01T00:00:00Z",
                 analysis_end="2026-01-01T01:00:00Z",
-                verify_prices=False,
+                verify_prices=True,
                 rebalance_every_n_snapshots=1,
                 currencies=("BTC",),
                 evaluation_splits=("test",),
@@ -165,11 +165,18 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
             )
             hedge_result = run_hedging_analysis(hedge_cfg)
             panel = hedge_result["hedge_interval_panel"]
+            price_verification = hedge_result["price_verification"]
             self.assertTrue(hedging_xlsx.exists())
             self.assertFalse(panel.empty)
             self.assertEqual(set(panel["split"].astype(str).str.lower()), {"test"})
             self.assertTrue(panel["eval_snapshot_ts"].dropna().le(pd.Timestamp("2026-01-01T01:00:00Z")).all())
             self.assertGreater(int(panel["is_summary_eligible"].fillna(False).sum()), 0)
+            valid_price_checks = pd.to_numeric(price_verification["n_valid_diff"], errors="coerce").fillna(0) > 0
+            self.assertTrue(valid_price_checks.any())
+            self.assertLess(
+                float(pd.to_numeric(price_verification.loc[valid_price_checks, "max_abs_price_diff"], errors="coerce").max()),
+                1e-10,
+            )
 
             hedging_report_dir = root / "notebooks" / "hedging_outputs" / "canonical" / "pwls"
             report = build_hedging_report(
