@@ -41,8 +41,6 @@ def _write_snapshot(data_dir: Path, stamp: str, *, F0: float, hours_from_start: 
             side = "C" if option_type == "call" else "P"
             for K in strikes:
                 mid = _black_inverse_price(F0, K, T, sigma, option_type)
-                # Keep a tight, strictly positive spread so every row survives
-                # the production liquidity filter, including small OTM prices.
                 half_spread = max(2.0e-5, 0.025 * max(mid, 1.0e-4))
                 bid = max(mid - half_spread, 1.0e-6)
                 ask = max(mid + half_spread, bid + 1.0e-6)
@@ -113,7 +111,7 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
                 train_frac=0.70,
                 test_frac=0.30,
                 global_random_seed=123,
-                max_nfev=dict(black=40, heston=60, svcj=80),
+                max_nfev=dict(black=40, heston=60, svcj=250),
                 l2_prev_strength=0.0,
                 n_workers=1,
                 limit_internal_threads=True,
@@ -128,9 +126,9 @@ class TestMiniCanonicalPipeline(unittest.TestCase):
             self.assertEqual(len(workbook["train_data"]) + len(workbook["test_data"]), 20)
             self.assertEqual(set(workbook["train_data"]["split"].unique()), {"train"})
             self.assertEqual(set(workbook["test_data"]["split"].unique()), {"test"})
-            self.assertTrue(bool(workbook["black_params"]["success"].iloc[0]))
-            self.assertTrue(bool(workbook["heston_params"]["success"].iloc[0]))
-            self.assertTrue(bool(workbook["svcj_params"]["success"].iloc[0]))
+            self.assertTrue(bool(workbook["black_params"]["success"].iloc[0]), str(workbook["black_params"]["message"].iloc[0]))
+            self.assertTrue(bool(workbook["heston_params"]["success"].iloc[0]), str(workbook["heston_params"]["message"].iloc[0]))
+            self.assertTrue(bool(workbook["svcj_params"]["success"].iloc[0]), str(workbook["svcj_params"]["message"].iloc[0]))
 
             sheet_names = set(pd.ExcelFile(calibration_xlsx, engine="openpyxl").sheet_names)
             self.assertIn("train_data", sheet_names)
