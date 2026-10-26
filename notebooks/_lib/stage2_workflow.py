@@ -102,6 +102,7 @@ def build_calibration_configs(
     root = Path(project_root).resolve()
     workers = int(n_workers) if n_workers is not None else max(1, int((os.cpu_count() or 4) - 2))
     paths = canonical_calibration_paths(root)
+    currencies = ("BTC", "ETH")
 
     common = dict(
         project_root=root,
@@ -149,17 +150,21 @@ def build_calibration_configs(
         n_workers=workers,
         limit_internal_threads=True,
         internal_num_threads=1,
-        currencies=("BTC", "ETH"),
+        currencies=currencies,
         verbose=bool(verbose),
     )
 
+    specs = canonical_calibration_specs()
     return {
         key: BatchConfig(
             **common,
             output_xlsx=paths[key],
             l2_prev_strength=spec.lambda_ts,
+            show_progress=True,
+            progress_label=spec.label,
+            progress_position_offset=index * len(currencies),
         )
-        for key, spec in canonical_calibration_specs().items()
+        for index, (key, spec) in enumerate(specs.items())
     }
 
 
@@ -188,11 +193,11 @@ def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, Path]
     if _can_run_specifications_concurrently(configs):
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {executor.submit(_run_one, key): key for key in required}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Calibration specifications", unit="spec", dynamic_ncols=True):
+            for future in as_completed(futures):
                 key, path = future.result()
                 output_paths[key] = path
     else:
-        for key in tqdm(required, desc="Calibration specifications", unit="spec", dynamic_ncols=True):
+        for key in required:
             key, path = _run_one(key)
             output_paths[key] = path
     return {key: output_paths[key] for key in required}
