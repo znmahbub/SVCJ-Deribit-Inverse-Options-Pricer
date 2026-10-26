@@ -6,9 +6,7 @@ on:
     paths:
       - 'requirements.txt'
       - 'notebooks/**'
-      - 'tests/test_stage2_workflow.py'
-      - 'tests/test_stage2_notebooks.py'
-      - 'tests/test_stage2_pricing_diagnostics.py'
+      - 'tests/**'
       - '.github/workflows/stage2-targeted-tests.yml'
 
 permissions:
@@ -17,6 +15,7 @@ permissions:
 jobs:
   targeted:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,41 +24,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Remove obsolete rho_j boundary diagnostics if needed
+      - name: Apply memory-bounded calibration-suite return contract
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('notebooks/_lib/chapter3_final.py')
+          p = Path('notebooks/_lib/stage2_workflow.py')
           text = p.read_text(encoding='utf-8')
-          text = text.replace(
-              '        row["rhoj_boundary_share"] = float((group["rho_j"].abs() > 0.95).mean())\n',
-              '',
-          )
-          text = text.replace(
-              '        if param in {"rho", "rho_j"}:\n',
-              '        if param == "rho":\n',
-          )
-          p.write_text(text, encoding='utf-8')
+          old = '''def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, dict[str, pd.DataFrame]]:\n    \"\"\"Run the canonical WLS then PWLS calibration workbooks.\"\"\"\n    required = tuple(canonical_calibration_specs())\n    missing = [key for key in required if key not in configs]\n    if missing:\n        raise ValueError(f\"missing canonical calibration configs: {missing}\")\n\n    outputs: dict[str, dict[str, pd.DataFrame]] = {}\n    for key in required:\n        cfg = configs[key]\n        cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)\n        outputs[key] = run_all_snapshots_to_excel(cfg)\n    return outputs\n'''
+          new = '''def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, Path]:\n    \"\"\"Run canonical WLS then PWLS and return only their workbook paths.\n\n    ``run_all_snapshots_to_excel`` returns the full in-memory workbook payload.\n    The canonical full-sample runner deliberately discards that payload after\n    each specification is persisted so WLS data are not retained while PWLS\n    is running.\n    \"\"\"\n    required = tuple(canonical_calibration_specs())\n    missing = [key for key in required if key not in configs]\n    if missing:\n        raise ValueError(f\"missing canonical calibration configs: {missing}\")\n\n    output_paths: dict[str, Path] = {}\n    for key in required:\n        cfg = configs[key]\n        cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)\n        run_all_snapshots_to_excel(cfg)\n        output_paths[key] = cfg.output_xlsx\n    return output_paths\n'''
+          if old not in text:
+              raise SystemExit('expected run_calibration_suite block not found; refusing blind patch')
+          p.write_text(text.replace(old, new), encoding='utf-8')
           PY
-      - run: pip install -r requirements.txt
-      - name: Run Stage 2 targeted tests
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tqdm nbformat nbclient jupyter-client ipykernel
+      - name: Stage 2 targeted tests
         run: >-
           python -m unittest
           tests.test_stage2_workflow
           tests.test_stage2_notebooks
           tests.test_stage2_pricing_diagnostics
           -v
-      - name: Commit rho_j reporting correction when green
+      - name: Full regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Commit memory-bounded runner when green
         if: success()
         shell: bash
         run: |
-          if git diff --quiet -- notebooks/_lib/chapter3_final.py; then
-            echo 'rho_j reporting already corrected.'
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add notebooks/_lib/chapter3_final.py
-          git commit -m "fix: remove bounded rhoj reporting diagnostics"
+          if git diff --quiet -- notebooks/_lib/stage2_workflow.py; then
+            echo 'No helper change to commit.'
+            exit 0
+          fi
+          git add notebooks/_lib/stage2_workflow.py
+          git commit -m "fix: keep canonical calibration suite memory bounded"
           git push origin HEAD:stage2-canonical-notebooks
