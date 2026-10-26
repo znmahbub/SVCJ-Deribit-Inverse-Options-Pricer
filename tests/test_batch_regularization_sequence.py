@@ -9,7 +9,7 @@ import pandas as pd
 import pandas.testing as pdt
 
 from tests._path import ROOT  # noqa: F401
-from src.batch_runner import BatchConfig, run_currency_to_excel
+from src.batch_runner import BatchConfig, PWLS_LAMBDA_TS, run_currency_to_excel
 from src.results_store import (
     PARAM_SHEET_BLACK,
     PARAM_SHEET_HESTON,
@@ -68,7 +68,7 @@ class TestBatchRegularizationSequence(unittest.TestCase):
             resume=True,
             smoke_test_max_files_per_currency=smoke,
             min_options_after_filter=1,
-            l2_prev_strength=10.0,
+            l2_prev_strength=PWLS_LAMBDA_TS,
             n_workers=4,
             currencies=("BTC",),
             save_every_n_files=100,
@@ -94,7 +94,6 @@ class TestBatchRegularizationSequence(unittest.TestCase):
                     for model in ("black", "heston", "svcj")
                 },
                 "train_df": pd.DataFrame(),
-                "validation_df": pd.DataFrame(),
                 "test_df": pd.DataFrame(),
                 "warm_next": warm_next,
             }
