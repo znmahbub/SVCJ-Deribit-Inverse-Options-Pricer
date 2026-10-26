@@ -25,8 +25,8 @@ The two fixed calibration specifications are:
 
 | Specification | Temporal penalty | Workbook |
 | --- | ---: | --- |
-| WLS | `lambda_TS = 0` | `excel files/canonical/calibration_wls.xlsx` |
-| PWLS | `lambda_TS = 1` | `excel files/canonical/calibration_pwls.xlsx` |
+| WLS | `lambda_TS = 0` | `outputs/canonical/calibration_wls.xlsx` |
+| PWLS | `lambda_TS = 1` | `outputs/canonical/calibration_pwls.xlsx` |
 
 There is no regularization sweep, validation-set model selection, or data-driven lambda choice in the canonical workflow. Both specifications use the same deterministic option-level **70% train / 30% test** split. Calibration uses only the 70% training subset; final pricing and canonical hedging reporting use only the 30% test subset.
 
@@ -34,50 +34,36 @@ There is no regularization sweep, validation-set model selection, or data-driven
 
 ## Canonical outputs
 
-Calibration:
+All generated artifacts are written under the root-level `outputs/` directory, which is gitignored. The canonical tree is:
 
 ```text
-excel files/canonical/
+outputs/canonical/
 ├── calibration_wls.xlsx
-└── calibration_pwls.xlsx
-```
-
-Pricing:
-
-```text
-notebooks/pricing_outputs/canonical/
-├── overall_metrics_by_specification.csv
-├── snapshot_win_rates_by_specification.csv
-├── wls/
-└── pwls/
-```
-
-Hedging runs both WLS and PWLS by default; PWLS remains the final specification:
-
-```text
-excel files/canonical/
+├── calibration_pwls.xlsx
+├── hedging_wls.xlsx
 ├── hedging_pwls.xlsx
-└── hedging_wls.xlsx
-
-notebooks/hedging_outputs/canonical/
-├── pwls/
-└── wls/
+├── .checkpoints/
+│   ├── calibration_wls/
+│   └── calibration_pwls/
+├── pricing/
+│   ├── overall_metrics_by_specification.csv
+│   ├── snapshot_win_rates_by_specification.csv
+│   ├── wls/
+│   └── pwls/
+├── hedging/
+│   ├── wls/
+│   └── pwls/
+└── final/
+    ├── tables/
+    │   ├── pricing/
+    │   └── hedging/
+    ├── figures/
+    │   ├── pricing/
+    │   └── hedging/
+    └── manifest.csv
 ```
 
-Final package:
-
-```text
-notebooks/final_outputs/canonical/
-├── tables/
-│   ├── pricing/
-│   └── hedging/
-├── figures/
-│   ├── pricing/
-│   └── hedging/
-└── manifest.csv
-```
-
-`04_final_analysis.ipynb` only collects already-generated CSV/HTML artifacts. It does not recalibrate, reprice, or rerun hedges.
+Hedging runs both WLS and PWLS by default; PWLS remains the final specification. `04_final_analysis.ipynb` only collects already-generated CSV/HTML artifacts. It does not recalibrate, reprice, or rerun hedges.
 
 ## Methodological conventions
 
@@ -105,7 +91,8 @@ notebooks/final_outputs/canonical/
 │   ├── 04_final_analysis.ipynb
 │   └── _lib/                    # Shared notebook/report helpers
 ├── data/                        # Option snapshots and futures histories
-├── excel files/                 # Generated/external workbook artifacts
+├── outputs/                     # Generated canonical outputs (gitignored)
+├── excel files/                 # Historical/external workbook links only
 ├── docs/                        # Methodology and reproducibility documentation
 ├── tests/                       # Numerical and pipeline regression suite
 ├── pricing_examples.ipynb       # Standalone pricing walkthrough
