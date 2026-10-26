@@ -8,18 +8,100 @@ on:
       - .github/workflows/temporary-e2e-notebook-smoke-v2.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  red-price-consistency:
+  green-price-consistency:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: stage4-5-final-validation-cleanup
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
-      - name: Run mini pipeline price-consistency regression
+      - name: Reuse calibration FFT grids in hedging
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/hedging_analysis.py')
+          s = p.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  'from src.inverse_fft_pricer import FFTParams, cf_heston, cf_svcj',
+                  'from src.inverse_fft_pricer import FFTParams, center_fft_params_on_strikes, cf_heston, cf_svcj',
+              ),
+              (
+                  'def build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str, str], dict[str, Any]]:\n',
+                  '''def build_fft_params_lookup(\n    workbook: dict[str, pd.DataFrame],\n    fft_params_base: FFTParams,\n) -> dict[tuple[str, str], dict[Any, FFTParams]]:\n    \"\"\"Reconstruct the frozen per-expiry FFT grids used during calibration.\n\n    Calibration centers each expiry grid on all filtered strikes before the\n    deterministic train/test split.  Recombine the persisted train and test\n    sheets here so hedging repricing uses the identical numerical grid rather\n    than recentering on the test subset.\n    \"\"\"\n    full = combine_option_sheets(workbook, splits=(\"train\", \"test\"))\n    lookup: dict[tuple[str, str], dict[Any, FFTParams]] = {}\n    if full.empty:\n        return lookup\n    for (snapshot_ts, currency), block in full.groupby([\"snapshot_ts\", \"currency\"], sort=True):\n        grids: dict[Any, FFTParams] = {}\n        for expiry, expiry_block in block.groupby(\"expiry_datetime\", sort=False):\n            strikes = _num(expiry_block[\"strike\"]).to_numpy(dtype=float)\n            strikes = strikes[np.isfinite(strikes) & (strikes > 0)]\n            if strikes.size:\n                grids[expiry] = center_fft_params_on_strikes(fft_params_base, strikes)\n        lookup[(_iso_z(snapshot_ts), str(currency).upper())] = grids\n    return lookup\n\n\ndef build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str, str], dict[str, Any]]:\n''',
+              ),
+              (
+                  'def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True) -> np.ndarray:',
+                  'def _model_prices_from_plan(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, use_cache: bool = True, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:',
+              ),
+              (
+                  'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)\n    _price_with_plan(pricing_plan, model=model.lower(), params=params, out_prices=live_prices, use_cache=use_cache)',
+                  'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)\n    _price_with_plan(pricing_plan, model=model.lower(), params=params, out_prices=live_prices, use_cache=use_cache)',
+              ),
+              (
+                  'def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> np.ndarray:',
+                  'def _regular_delta_block(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> np.ndarray:',
+              ),
+              (
+                  'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=None)\n    live_positions = np.flatnonzero(live)',
+                  'pricing_plan = _build_pricing_plan(live_block, fft_params_base=fft_params, dynamic_b=dynamic_b, fft_params_by_expiry=fft_params_by_expiry)\n    live_positions = np.flatnonzero(live)',
+              ),
+              (
+                  'def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128) -> tuple[np.ndarray, np.ndarray, np.ndarray]:\n    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True)\n    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)',
+                  'def compute_prices_and_deltas(model: str, block: pd.DataFrame, params: dict[str, Any], fft_params: FFTParams, dynamic_b: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, fft_params_by_expiry: dict[Any, FFTParams] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:\n    prices = _model_prices_from_plan(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, use_cache=True, fft_params_by_expiry=fft_params_by_expiry)\n    reg_delta = _regular_delta_block(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=fft_params_by_expiry)',
+              ),
+              (
+                  'def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:',
+                  'def enrich_options_with_model_outputs(options: pd.DataFrame, param_lookup: dict[tuple[str, str, str], dict[str, Any]], fft_params: FFTParams, dynamic_b: bool = True, verify_prices: bool = True, delta_u_max: float = 200.0, delta_quad_n: int = 128, progress=None, fft_params_lookup: dict[tuple[str, str], dict[Any, FFTParams]] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:',
+              ),
+              (
+                  '        ts_iso = _iso_z(snapshot_ts)\n        for model in MODELS:',
+                  '        ts_iso = _iso_z(snapshot_ts)\n        block_fft_params = (fft_params_lookup or {}).get((ts_iso, str(currency).upper()))\n        for model in MODELS:',
+              ),
+              (
+                  'prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n)',
+                  'prices, reg_delta, net_delta = compute_prices_and_deltas(model=model, block=block, params=params, fft_params=fft_params, dynamic_b=dynamic_b, delta_u_max=delta_u_max, delta_quad_n=delta_quad_n, fft_params_by_expiry=block_fft_params)',
+              ),
+              (
+                  '        options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)\n        param_lookup = build_param_lookup(workbook)',
+                  '        options = filter_options_for_run(combine_option_sheets(workbook, splits=cfg.evaluation_splits), cfg)\n        param_lookup = build_param_lookup(workbook)\n        fft_params_lookup = build_fft_params_lookup(workbook, cfg.fft_params)',
+              ),
+              (
+                  '                progress=inner,\n            )',
+                  '                progress=inner,\n                fft_params_lookup=fft_params_lookup,\n            )',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = s.count(old)
+              if count != 1:
+                  raise RuntimeError(f'Expected exactly one match, found {count}: {old[:100]!r}')
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Run price-consistency regression
         run: python -m unittest tests.test_mini_pipeline.TestMiniCanonicalPipeline.test_synthetic_snapshot_to_final_artifact_assembly -v
+      - name: Run focused hedge tests
+        run: |
+          python -m unittest -v \
+            tests.test_perp_price_provenance \
+            tests.test_hedge_mapping \
+            tests.test_hedging_invariants \
+            tests.test_measure_delta_identities \
+            tests.test_stage3_workflow
+      - name: Commit verified production fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/hedging_analysis.py
+          git commit -m "fix: reuse calibration FFT grids in hedging"
+          git push origin HEAD:stage4-5-final-validation-cleanup
