@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - stage4-5-final-validation-cleanup
-    paths:
-      - .github/workflows/temporary-100snapshot-e2e-verification.yml
 
 permissions:
   contents: read
@@ -33,6 +31,7 @@ jobs:
       - name: Run complete unit suite on clean repository view
         run: |
           rm -f .github/workflows/temporary-100snapshot-e2e-verification.yml
+          rm -f .github/temporary_100snapshot_acceptance.py
           python -m unittest discover -s tests -v
 
       - name: Prepare latest 100 consecutive real snapshots
@@ -40,31 +39,17 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import json, shutil
-          root = Path.cwd(); data = root / 'data'
-          files = sorted(data.glob('deribit_options_snapshot_*.csv'))
-          if len(files) < 100:
-              raise RuntimeError(f'need >=100 snapshots, got {len(files)}')
-          chosen = files[-100:]
-          keep = {p.name for p in chosen}
+          root=Path.cwd(); data=root/'data'
+          files=sorted(data.glob('deribit_options_snapshot_*.csv'))
+          if len(files)<100: raise RuntimeError(f'need >=100 snapshots, got {len(files)}')
+          chosen=files[-100:]; keep={p.name for p in chosen}
           for p in files:
-              if p.name not in keep:
-                  p.unlink()
-          for p in [
-              root/'excel files'/'canonical',
-              root/'notebooks'/'pricing_outputs'/'canonical',
-              root/'notebooks'/'hedging_outputs'/'canonical',
-              root/'notebooks'/'final_outputs'/'canonical',
-          ]:
-              if p.exists():
-                  shutil.rmtree(p)
-          payload = {
-              'n_snapshots': len(chosen),
-              'first_snapshot': chosen[0].name,
-              'last_snapshot': chosen[-1].name,
-              'selected_snapshots': [p.name for p in chosen],
-          }
-          Path('acceptance_selection.json').write_text(json.dumps(payload, indent=2), encoding='utf-8')
-          print(json.dumps({k:v for k,v in payload.items() if k != 'selected_snapshots'}, indent=2))
+              if p.name not in keep: p.unlink()
+          for p in [root/'excel files'/'canonical',root/'notebooks'/'pricing_outputs'/'canonical',root/'notebooks'/'hedging_outputs'/'canonical',root/'notebooks'/'final_outputs'/'canonical']:
+              if p.exists(): shutil.rmtree(p)
+          payload={'n_snapshots':len(chosen),'first_snapshot':chosen[0].name,'last_snapshot':chosen[-1].name,'selected_snapshots':[p.name for p in chosen]}
+          Path('acceptance_selection.json').write_text(json.dumps(payload,indent=2),encoding='utf-8')
+          print(json.dumps({k:v for k,v in payload.items() if k!='selected_snapshots'},indent=2))
           PY
 
       - name: Execute notebooks 00 to 04 sequentially
@@ -84,273 +69,7 @@ jobs:
           done
 
       - name: Verify mathematical, statistical, and economic logic
-        run: |
-          python - <<'PY'
-          from __future__ import annotations
-          import json, re
-          from pathlib import Path
-          import nbformat
-          import numpy as np
-          import pandas as pd
-
-          root = Path.cwd()
-          selected = json.loads((root/'acceptance_selection.json').read_text())
-          files = selected['selected_snapshots']
-          rx = re.compile(r'deribit_options_snapshot_(\d{8}T\d{6})Z\.csv')
-          times = [pd.to_datetime(rx.fullmatch(x).group(1), format='%Y%m%dT%H%M%S', utc=True) for x in files]
-          expected = {(t,c) for t in times for c in ('BTC','ETH')}
-          n_expected_blocks = len(expected)
-          hard_checks=[]; warnings=[]
-          report={
-              'selection': {k:v for k,v in selected.items() if k != 'selected_snapshots'},
-              'hard_checks': hard_checks,
-              'warnings': warnings,
-              'calibration': {}, 'pricing': {}, 'hedging': {}, 'economic_diagnostics': {}, 'final': {}
-          }
-
-          def check(cond,msg):
-              if not bool(cond): raise AssertionError(msg)
-              hard_checks.append(msg)
-
-          def warn(cond,msg):
-              if not bool(cond): warnings.append(msg)
-
-          def num(x): return pd.to_numeric(x,errors='coerce').to_numpy(float)
-          def rmse(x):
-              a=np.asarray(x,float); a=a[np.isfinite(a)]
-              return float(np.sqrt(np.mean(a*a))) if len(a) else np.nan
-          def qstats(x):
-              a=np.asarray(x,float); a=a[np.isfinite(a)]
-              if not len(a): return {'n':0}
-              return {k:float(v) for k,v in zip(['min','p01','p05','median','p95','p99','max'],np.quantile(a,[0,.01,.05,.5,.95,.99,1]))} | {'n':int(len(a))}
-          def transformed_path_movement(df, params):
-              vals=[]
-              for currency,g in df.sort_values('timestamp').groupby('currency'):
-                  g=g.sort_values('timestamp')
-                  for p in params:
-                      x=pd.to_numeric(g[p],errors='coerce').to_numpy(float)
-                      if p in {'kappa','theta','sigma_v','v0','lam','sigma_y','ell_v','sigma'}:
-                          x=np.log(np.clip(x,1e-15,None))
-                      elif p=='rho':
-                          x=np.arctanh(np.clip(x,-.999999,.999999))
-                      d=np.abs(np.diff(x)); d=d[np.isfinite(d)]
-                      vals.extend(d.tolist())
-              return qstats(vals)
-
-          check(len(files)==100,'exactly 100 consecutive snapshots selected')
-          check(all(t2>t1 for t1,t2 in zip(times,times[1:])),'snapshot timestamps strictly increasing')
-
-          progress_markers={
-              '00_check_data.ipynb':['Inspecting snapshots'],
-              '01_run_calibration.ipynb':['Calibration specifications'],
-              '02_pricing_analysis.ipynb':['Pricing specifications'],
-              '03_run_hedging.ipynb':['Hedging specifications','Hedging reports'],
-              '04_final_analysis.ipynb':['Copying pricing_table','Copying hedging_table'],
-          }
-          for name,markers in progress_markers.items():
-              nb=nbformat.read(root/'notebooks'/name,as_version=4); errors=[]; rendered=[]
-              for cell in nb.cells:
-                  for out in cell.get('outputs',[]):
-                      if out.get('output_type')=='error': errors.append(out.get('evalue','error'))
-                      if 'text' in out: rendered.append(str(out['text']))
-                      for value in out.get('data',{}).values(): rendered.append(str(value))
-              check(not errors,f'{name}: no execution errors')
-              blob='\n'.join(rendered)
-              check(all(m in blob for m in markers),f'{name}: expected progress/status output emitted')
-
-          test_frames={}; holdout_keys={}; param_frames={}
-          bounds={
-              'black': {'sigma':(1e-4,5.0)},
-              'heston': {'kappa':(1e-4,50.0),'theta':(1e-6,5.0),'sigma_v':(1e-4,10.0),'rho':(-1,1),'v0':(1e-6,5.0)},
-              'svcj': {'kappa':(1e-4,50.0),'theta':(1e-6,5.0),'sigma_v':(1e-4,10.0),'rho':(-1,1),'v0':(1e-6,5.0),'lam':(1e-6,10.0),'ell_y':(-5,5),'sigma_y':(1e-4,5.0),'ell_v':(1e-6,10.0)},
-          }
-          for spec,lam in [('wls',0.0),('pwls',1.0)]:
-              path=root/'excel files'/'canonical'/f'calibration_{spec}.xlsx'
-              check(path.exists(),f'{spec}: calibration workbook exists')
-              check(set(pd.ExcelFile(path).sheet_names)=={'black_params','heston_params','svcj_params','train_data','test_data'},f'{spec}: canonical calibration schema')
-              spec_info={'models':{}}
-              for model in ('black','heston','svcj'):
-                  d=pd.read_excel(path,sheet_name=f'{model}_params')
-                  d['timestamp']=pd.to_datetime(d.timestamp,utc=True); d['currency']=d.currency.astype(str).str.upper()
-                  param_frames[(spec,model)]=d.copy()
-                  check(len(d)==n_expected_blocks,f'{spec} {model}: exactly {n_expected_blocks} BTC/ETH calibration blocks')
-                  check(set(zip(d.timestamp,d.currency))==expected,f'{spec} {model}: every expected timestamp/currency block present')
-                  check(np.allclose(num(d.l2_prev_strength),lam,rtol=0,atol=0),f'{spec} {model}: lambda_TS={lam:g}')
-                  success=d.success.fillna(False).astype(bool)
-                  success_rate=float(success.mean())
-                  check(success_rate>=0.95,f'{spec} {model}: calibration success rate >=95% ({success_rate:.1%})')
-                  params=list(bounds[model]) + (['rho_j'] if model=='svcj' else [])
-                  finite_success={}
-                  for p in params:
-                      vals=pd.to_numeric(d.loc[success,p],errors='coerce')
-                      finite_success[p]=float(np.isfinite(vals).mean()) if len(vals) else 0.0
-                      check(finite_success[p]==1.0,f'{spec} {model} {p}: finite on successful blocks')
-                  if model=='svcj':
-                      check(not d.loc[success,'svcj_martingale_violated'].fillna(False).astype(bool).any(),f'{spec} SVCJ: no martingale violations among successful blocks')
-                      check(not d.loc[success,'svcj_contour_violated'].fillna(False).astype(bool).any(),f'{spec} SVCJ: no Carr-Madan contour violations among successful blocks')
-                  proximity={}
-                  for p,(lo,hi) in bounds[model].items():
-                      x=pd.to_numeric(d.loc[success,p],errors='coerce').to_numpy(float); x=x[np.isfinite(x)]
-                      if not len(x): proximity[p]=np.nan; continue
-                      span=hi-lo
-                      proximity[p]=float(np.mean((x<=lo+0.01*span)|(x>=hi-0.01*span)))
-                  feller=float(d.loc[success,'feller_violated'].fillna(False).astype(bool).mean()) if 'feller_violated' in d else np.nan
-                  spec_info['models'][model]={
-                      'rows':int(len(d)), 'success':int(success.sum()), 'success_rate':success_rate,
-                      'feller_violation_share':feller,
-                      'boundary_proximity_share':proximity,
-                  }
-                  warn(success_rate>=0.99,f'{spec} {model}: >1% calibration failures ({1-success_rate:.1%})')
-                  for p,share in proximity.items():
-                      if np.isfinite(share): warn(share<0.25,f'{spec} {model} {p}: {share:.1%} of successful estimates lie within 1% of a hard bound')
-              tr=pd.read_excel(path,sheet_name='train_data'); te=pd.read_excel(path,sheet_name='test_data'); test_frames[spec]=te.copy()
-              for f in (tr,te): f['snapshot_ts']=pd.to_datetime(f.snapshot_ts,utc=True); f['currency']=f.currency.astype(str).str.upper()
-              check(set(tr.split.astype(str).str.lower())=={'train'},f'{spec}: train sheet pure')
-              check(set(te.split.astype(str).str.lower())=={'test'},f'{spec}: test sheet pure')
-              shares=[]
-              for ts,c in sorted(expected):
-                  a=tr[(tr.snapshot_ts==ts)&(tr.currency==c)]; b=te[(te.snapshot_ts==ts)&(te.currency==c)]
-                  check(len(a)>0 and len(b)>0,f'{spec} {c} {ts}: train and test are both nonempty')
-                  check(not(set(a.instrument_name.astype(str)) & set(b.instrument_name.astype(str))),f'{spec} {c} {ts}: no train/test instrument overlap')
-                  shares.append(len(a)/(len(a)+len(b)))
-              check(all(.65<=x<=.75 for x in shares),f'{spec}: every block is approximately 70/30')
-              holdout_keys[spec]=set(map(tuple,te[['snapshot_ts','currency','instrument_name']].astype(str).itertuples(index=False,name=None)))
-              spec_info.update({'train_rows':int(len(tr)),'test_rows':int(len(te)),'train_share_stats':qstats(shares)})
-              report['calibration'][spec]=spec_info
-          check(holdout_keys['wls']==holdout_keys['pwls'],'WLS/PWLS use identical deterministic test holdout')
-
-          movement={}
-          for model,params in {
-              'black':['sigma'],
-              'heston':['kappa','theta','sigma_v','rho','v0'],
-              'svcj':['kappa','theta','sigma_v','rho','v0','lam','ell_y','sigma_y','ell_v','rho_j'],
-          }.items():
-              movement[model]={}
-              for spec in ('wls','pwls'):
-                  movement[model][spec]=transformed_path_movement(param_frames[(spec,model)],params)
-              w=movement[model]['wls'].get('median',np.nan); p=movement[model]['pwls'].get('median',np.nan)
-              if np.isfinite(w) and w>0 and np.isfinite(p):
-                  movement[model]['pwls_to_wls_median_movement_ratio']=float(p/w)
-                  warn(p/w<=1.25,f'PWLS {model} transformed parameter path is unexpectedly less smooth than WLS (median movement ratio {p/w:.2f})')
-          report['economic_diagnostics']['parameter_path_movement']=movement
-
-          proot=root/'notebooks'/'pricing_outputs'/'canonical'; pricing_diag={}
-          for spec in ('wls','pwls'):
-              overall=pd.read_csv(proot/spec/'baseline_overall_metrics.csv'); snap=pd.read_csv(proot/spec/'snapshot_time_series_metrics.csv'); wins=pd.read_csv(proot/spec/'snapshot_model_win_rates.csv')
-              check(set(overall.scope)=={'BTC','ETH','Pooled'},f'{spec}: pricing scopes BTC/ETH/Pooled')
-              pooled=overall[overall.scope=='Pooled'].iloc[0]; te=test_frames[spec]
-              F=num(te.F0); mid=num(te.mid_price_clean); metrics={}
-              for model in ('black','heston','svcj'):
-                  prices=num(te[f'price_{model}'])
-                  check(np.isfinite(prices).all(),f'{spec} {model}: all persisted test prices finite')
-                  check(((prices>=-1e-12)&(prices<=1+1e-12)).all(),f'{spec} {model}: inverse option prices lie in [0,1]')
-                  check(pd.isna(pooled[f'rmse_coin_{model}']) and pd.isna(pooled[f'mae_coin_{model}']),f'{spec} {model}: pooled BTC/ETH raw-coin errors are undefined')
-                  err=prices-mid; direct=rmse(F*err); reported=float(pooled[f'rmse_usd_{model}'])
-                  check(np.isclose(direct,reported,rtol=1e-10,atol=1e-12),f'{spec} {model}: pooled USD RMSE reconstructs exactly')
-                  within=float(pooled[f'within_spread_{model}']); check(0<=within<=1,f'{spec} {model}: within-spread rate is a probability')
-                  metrics[model]={'rmse_usd':reported,'mae_usd':float(pooled[f'mae_usd_{model}']),'within_spread':within}
-
-                  pairs=te[['snapshot_ts','currency','expiry_datetime','strike','F0','option_type',f'price_{model}']].copy()
-                  pairs['option_type']=pairs.option_type.astype(str).str.lower()
-                  calls=pairs[pairs.option_type=='call'].rename(columns={f'price_{model}':'call'})
-                  puts=pairs[pairs.option_type=='put'].rename(columns={f'price_{model}':'put'})
-                  keys=['snapshot_ts','currency','expiry_datetime','strike','F0']
-                  pp=calls[keys+['call']].merge(puts[keys+['put']],on=keys,how='inner')
-                  if len(pp):
-                      parity=np.abs(num(pp['call'])-num(pp['put'])-(1-num(pp['strike'])/num(pp['F0'])))
-                      check(float(np.nanmax(parity))<1e-8,f'{spec} {model}: inverse put-call parity holds on matched test pairs')
-              ranking=sorted(metrics,key=lambda m:metrics[m]['rmse_usd'])
-              warn(metrics['heston']['rmse_usd']<metrics['black']['rmse_usd'],f'{spec}: Heston does not improve pooled USD RMSE over Black')
-              warn(metrics['svcj']['rmse_usd']<metrics['black']['rmse_usd'],f'{spec}: SVCJ does not improve pooled USD RMSE over Black')
-              pricing_diag[spec]={
-                  'overall':metrics,
-                  'rmse_ranking_best_to_worst':ranking,
-                  'snapshot_win_rates':wins.to_dict(orient='records'),
-                  'snapshot_rmse_stats':{m:qstats(pd.to_numeric(snap[f'rmse_{m}'],errors='coerce')) for m in ('black','heston','svcj')},
-              }
-          report['pricing']=pricing_diag
-
-          hroot=root/'notebooks'/'hedging_outputs'/'canonical'; hedge_diag={}
-          for spec in ('wls','pwls'):
-              path=root/'excel files'/'canonical'/f'hedging_{spec}.xlsx'; check(path.exists(),f'{spec}: hedging workbook exists')
-              te=pd.read_excel(path,sheet_name='test_data'); panel=pd.read_excel(path,sheet_name='hedge_interval_panel'); pv=pd.read_excel(path,sheet_name='price_verification')
-              check(set(te.split.astype(str).str.lower())=={'test'},f'{spec}: hedging option sheet is test-only')
-              check(set(panel.split.astype(str).str.lower())<= {'test'},f'{spec}: hedge interval panel is test-only')
-              panel['snapshot_ts']=pd.to_datetime(panel.snapshot_ts,utc=True,errors='coerce')
-              eligible=panel.is_summary_eligible.fillna(False).astype(bool)
-              check(int(eligible.sum())>0,f'{spec}: nonempty hedge-eligible sample')
-              nonterminal=panel.snapshot_ts < max(times)
-              coverage=float(eligible[nonterminal].mean()) if nonterminal.any() else 0.0
-              warn(coverage>=0.60,f'{spec}: hedge eligibility among nonterminal rows is only {coverage:.1%}')
-              price_diag={}
-              for model in ('black','heston','svcj'):
-                  q=pv[pv.model.astype(str).str.lower()==model]
-                  check(len(q)==n_expected_blocks,f'{spec} {model}: price verification has all {n_expected_blocks} blocks')
-                  check(q.error.isna().all(),f'{spec} {model}: no hedging repricing errors')
-                  check((pd.to_numeric(q.n_valid_prices)==pd.to_numeric(q.n_rows)).all(),f'{spec} {model}: all test prices finite in hedging repricer')
-                  maxdiff=float(pd.to_numeric(q.max_abs_price_diff,errors='coerce').max())
-                  check(maxdiff<1e-10,f'{spec} {model}: hedging repricing matches calibration prices <1e-10 coin')
-                  reg=num(te[f'regular_delta_{model}']); net=num(te[f'net_delta_{model}']); price=num(te[f'price_{model}']); m=np.isfinite(reg)&np.isfinite(net)&np.isfinite(price)
-                  check(np.allclose(net[m],reg[m]-price[m],rtol=1e-10,atol=1e-10),f'{spec} {model}: net delta = regular delta - V_coin')
-                  price_diag[model]=maxdiff
-              F=num(panel.F_term); H0=num(panel.H_perp); H1=num(panel.perp_close_t1); scale=num(panel.hedge_notional_scale_usd_per_delta)
-              valid=np.isfinite(F)&np.isfinite(H0)&np.isfinite(scale)&(F>0)&(H0>0)
-              check(np.allclose(scale[valid],H0[valid]**2/F[valid],rtol=1e-12,atol=1e-12),f'{spec}: hedge scale H^2/F')
-              keys=['snapshot_ts','currency','instrument_name']; delta_cols=[f'{kind}_delta_{m}' for m in ('black','heston','svcj') for kind in ('regular','net')]
-              merged=panel.merge(te[keys+delta_cols],on=keys,how='left',validate='many_to_one'); elig=merged.is_summary_eligible.fillna(False).astype(bool).to_numpy()
-              for model in ('black','heston','svcj'):
-                  for hedge_type,delta_col in [('delta',f'regular_delta_{model}'),('net_delta',f'net_delta_{model}')]:
-                      delta=num(merged[delta_col]); N=num(merged[f'hedge_notional_usd_{model}_{hedge_type}']); mask=elig&np.isfinite(delta)&np.isfinite(N)&np.isfinite(scale)
-                      check(mask.any(),f'{spec} {model} {hedge_type}: eligible finite rows exist')
-                      check(np.allclose(N[mask],scale[mask]*delta[mask],rtol=1e-10,atol=1e-10),f'{spec} {model} {hedge_type}: N_USD=(H^2/F)delta')
-                      un=num(merged.option_pnl_coin_short); actual=num(merged[f'net_pnl_coin_{model}_{hedge_type}']); direct=un+N*(1/H0-1/H1); pm=mask&np.isfinite(H1)&(H1>0)&np.isfinite(un)&np.isfinite(actual)
-                      check(np.allclose(actual[pm],direct[pm],rtol=1e-10,atol=1e-12),f'{spec} {model} {hedge_type}: inverse-perpetual hedge-error identity')
-              headline=pd.read_csv(hroot/spec/'headline_test.csv'); sample=pd.read_csv(hroot/spec/'sample_construction.csv')
-              check(len(headline)>0,f'{spec}: headline hedge table nonempty')
-              check(set(headline.model.astype(str).str.lower())=={'black','heston','svcj'},f'{spec}: headline includes all models')
-              check(set(headline.hedge_type.astype(str).str.lower())=={'delta','net_delta'},f'{spec}: headline includes both hedge rules')
-              pos_rmse=float((pd.to_numeric(headline.rmse_reduction,errors='coerce')>0).mean())
-              pos_mae=float((pd.to_numeric(headline.mae_reduction,errors='coerce')>0).mean())
-              warn(pos_rmse>=0.50,f'{spec}: fewer than half of currency/model/hedge cells reduce RMSE ({pos_rmse:.1%})')
-              warn(pos_mae>=0.50,f'{spec}: fewer than half of currency/model/hedge cells reduce MAE ({pos_mae:.1%})')
-              dt=num(panel.loc[eligible,'dt_hours']); basis=num(panel.loc[eligible,'basis_abs'])
-              notionals=[]
-              for model in ('black','heston','svcj'):
-                  for ht in ('delta','net_delta'):
-                      notionals.extend(np.abs(num(panel.loc[eligible,f'hedge_notional_usd_{model}_{ht}'])).tolist())
-              warn(qstats(dt).get('p99',0)<48,f'{spec}: 99th percentile hedge interval exceeds 48h')
-              warn(qstats(basis).get('p99',0)<0.20,f'{spec}: 99th percentile absolute perp/term basis exceeds 20%')
-              hedge_diag[spec]={
-                  'panel_rows':int(len(panel)), 'eligible_intervals':int(eligible.sum()), 'nonterminal_eligibility_rate':coverage,
-                  'max_repricing_diff_by_model':price_diag,
-                  'headline':headline.to_dict(orient='records'),
-                  'sample_construction':sample.to_dict(orient='records'),
-                  'dt_hours':qstats(dt), 'basis_abs':qstats(basis), 'abs_hedge_notional_usd':qstats(notionals),
-                  'positive_rmse_reduction_share':pos_rmse, 'positive_mae_reduction_share':pos_mae,
-              }
-          report['hedging']=hedge_diag
-
-          final=root/'notebooks'/'final_outputs'/'canonical'; manifest=pd.read_csv(final/'manifest.csv')
-          check(len(manifest)>0,'final manifest nonempty')
-          check({'pricing_table','pricing_figure','hedging_table','hedging_figure'}<=set(manifest.artifact_type),'final manifest contains all artifact classes')
-          check(all(Path(x).exists() for x in manifest.destination.astype(str)),'every final manifest destination exists')
-          check(manifest.destination.astype(str).str.contains('/hedging/wls/').any(),'final package includes WLS hedging')
-          check(manifest.destination.astype(str).str.contains('/hedging/pwls/').any(),'final package includes PWLS hedging')
-          report['final']={'manifest_rows':int(len(manifest)),'artifact_counts':manifest.artifact_type.value_counts().to_dict()}
-
-          report['verdict']='PASS' if not warnings else 'PASS_WITH_WARNINGS'
-          (root/'acceptance_report_100.json').write_text(json.dumps(report,indent=2,default=str),encoding='utf-8')
-          pd.DataFrame([{'warning':w} for w in warnings]).to_csv(root/'acceptance_warnings_100.csv',index=False)
-          print('FINAL_100_SNAPSHOT_ACCEPTANCE_COMPLETE')
-          print('VERDICT:',report['verdict'])
-          print('HARD_CHECKS:',len(hard_checks))
-          print('WARNINGS:',len(warnings))
-          for w in warnings: print('WARNING:',w)
-          print('SELECTION:',report['selection'])
-          print('PRICING:',json.dumps(report['pricing'],indent=2,default=str))
-          print('HEDGING:',json.dumps(report['hedging'],indent=2,default=str))
-          print('PARAMETER_MOVEMENT:',json.dumps(report['economic_diagnostics']['parameter_path_movement'],indent=2,default=str))
-          PY
+        run: python .github/temporary_100snapshot_acceptance.py
 
       - name: Upload compact acceptance evidence
         if: always()
