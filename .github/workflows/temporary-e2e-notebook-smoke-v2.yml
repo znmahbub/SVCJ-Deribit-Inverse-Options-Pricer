@@ -8,18 +8,38 @@ on:
       - .github/workflows/temporary-e2e-notebook-smoke-v2.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  red-test:
+  green-fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: stage4-5-final-validation-cleanup
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
-      - name: Run timestamp normalization regression
+      - name: Normalize perpetual proxy timestamps to option-snapshot precision
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/hedging_analysis.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce")'
+          new = 'out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce").dt.floor("s")'
+          if text.count(old) != 1:
+              raise RuntimeError(f'Expected exactly one timestamp assignment, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+      - name: Verify timestamp regression is green
         run: python -m unittest tests.test_perp_price_provenance.PerpetualPriceProvenanceTests.test_perp_timestamps_are_normalized_to_snapshot_second_precision -v
+      - name: Commit production fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/hedging_analysis.py
+          git commit -m "fix: align hedge proxy timestamps to snapshots"
+          git push origin HEAD:stage4-5-final-validation-cleanup
