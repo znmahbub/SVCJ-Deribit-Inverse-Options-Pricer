@@ -92,7 +92,6 @@ Hedging runs both WLS and PWLS by default; PWLS remains the final specification.
 │   └── _lib/                    # Shared notebook/report helpers
 ├── data/                        # Option snapshots and futures histories
 ├── outputs/                     # Generated canonical outputs (gitignored)
-├── excel files/                 # Historical/external workbook links only
 ├── docs/                        # Methodology and reproducibility documentation
 ├── tests/                       # Numerical and pipeline regression suite
 ├── pricing_examples.ipynb       # Standalone pricing walkthrough
@@ -148,5 +147,3 @@ The canonical FFT validation and its numerical evidence are documented in `docs/
 - `docs/reproducibility/remediation_baseline.md` — historical pre-remediation baseline. It is provenance only, not an active workflow specification.
 - `docs/reproducibility/thesis_sample_manifest.csv` — submitted-thesis sample manifest.
 - `docs/Pricing and Hedging Deribit Inverse Options under Affine Stochastic Volatility Models with Jumps.pdf` — submitted thesis baseline.
-
-Large historical Excel artifacts remain external; see `excel files/link.txt` where applicable.
