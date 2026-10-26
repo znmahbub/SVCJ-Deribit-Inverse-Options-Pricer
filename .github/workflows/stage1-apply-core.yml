@@ -1,0 +1,179 @@
+name: stage1-apply-core
+
+on:
+  push:
+    branches: [stage1-70-30-core]
+    paths: ['.github/workflows/stage1-apply-core.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage1-70-30-core
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Migrate snapshot and batch APIs to train-test
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'expected text not found in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          p = Path('src/snapshot_job.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('Assigns a deterministic train/validation/test cross-sectional split.', 'Assigns a deterministic 70/30 train/test cross-sectional split.')
+          text = text.replace('Prices *all* filtered options once per model and adds three price columns.', 'Prices *all* filtered options once per model and adds three price columns.')
+          text = text.replace('    validation_frac: float,\n', '')
+          text = text.replace('      - ``train_df`` / ``validation_df`` / ``test_df``: priced option rows', '      - ``train_df`` / ``test_df``: priced option rows')
+          text = text.replace('        rmse_validation: float,\n        mae_validation: float,\n', '')
+          text = text.replace('        n_validation: int,\n', '')
+          text = text.replace('            rmse_validation=float(rmse_validation) if rmse_validation is not None else float("nan"),\n            mae_validation=float(mae_validation) if mae_validation is not None else float("nan"),\n', '')
+          text = text.replace('            n_validation=int(n_validation),\n', '')
+          text = text.replace('                rmse_validation=np.nan, mae_validation=np.nan,\n', '')
+          text = text.replace('                n_total=int(n_total), n_train=0, n_validation=0, n_test=0,\n', '                n_total=int(n_total), n_train=0, n_test=0,\n')
+          text = text.replace('            "validation_df": empty_tt,\n', '')
+          old_split = '''    # Deterministic within-snapshot three-way cross-sectional split.  The split
+    # is assigned once and then reused by every model; model choice never resplits.
+    df_filt = df_filt.reset_index(drop=True).copy()
+    split_cfg = SplitConfig(
+        train_frac=float(train_frac),
+        validation_frac=float(validation_frac),
+        test_frac=float(test_frac),
+        random_seed=int(random_seed),
+    )
+    df_filt["split"] = assign_cross_sectional_split(df_filt, split_cfg).to_numpy()
+    n_total_rows = int(len(df_filt))
+    train = df_filt.loc[df_filt["split"] == "train"].copy()
+    validation = df_filt.loc[df_filt["split"] == "validation"].copy()
+    test = df_filt.loc[df_filt["split"] == "test"].copy()
+    n_train = int(len(train))
+    n_validation = int(len(validation))
+'''
+          new_split = '''    # Deterministic within-snapshot 70/30 cross-sectional split. The split is
+    # assigned once and reused by every model; calibration uses train only.
+    df_filt = df_filt.reset_index(drop=True).copy()
+    split_cfg = SplitConfig(
+        train_frac=float(train_frac),
+        test_frac=float(test_frac),
+        random_seed=int(random_seed),
+    )
+    df_filt["split"] = assign_cross_sectional_split(df_filt, split_cfg).to_numpy()
+    train = df_filt.loc[df_filt["split"] == "train"].copy()
+    test = df_filt.loc[df_filt["split"] == "test"].copy()
+    n_train = int(len(train))
+'''
+          if old_split not in text:
+              raise SystemExit('snapshot split block not found')
+          text = text.replace(old_split, new_split)
+          text = text.replace('    # Reprice full snapshot once per model, then reuse the frozen three-way split.', '    # Reprice full snapshot once per model, then reuse the frozen train/test split.')
+          old_metrics = '''    train_out = df_out.loc[df_out["split"] == "train"].copy()
+    validation_out = df_out.loc[df_out["split"] == "validation"].copy()
+    test_out = df_out.loc[df_out["split"] == "test"].copy()
+
+    # Errors (unweighted) are reported separately for all three splits.
+    y_train = train_out["mid_price_clean"].to_numpy(dtype=float) if len(train_out) else np.array([])
+    y_validation = validation_out["mid_price_clean"].to_numpy(dtype=float) if len(validation_out) else np.array([])
+    y_test = test_out["mid_price_clean"].to_numpy(dtype=float) if len(test_out) else np.array([])
+
+    errs: dict[str, dict[str, float]] = {}
+    for model in models:
+        col = price_cols[model]
+        p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
+        p_validation = validation_out[col].to_numpy(dtype=float) if len(validation_out) else np.array([])
+        p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
+        e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
+        e_va = compute_errors(y_validation, p_validation) if len(validation_out) else {"rmse": np.nan, "mae": np.nan}
+        e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
+        errs[model] = dict(
+            rmse_train=float(e_tr["rmse"]),
+            mae_train=float(e_tr["mae"]),
+            rmse_validation=float(e_va["rmse"]),
+            mae_validation=float(e_va["mae"]),
+            rmse_test=float(e_te["rmse"]),
+            mae_test=float(e_te["mae"]),
+        )
+
+    n_total = int(len(df_out))
+    n_validation = int(len(validation_out))
+    n_test = int(len(test_out))
+'''
+          new_metrics = '''    train_out = df_out.loc[df_out["split"] == "train"].copy()
+    test_out = df_out.loc[df_out["split"] == "test"].copy()
+
+    # Unweighted reporting errors are kept separately for train and test.
+    y_train = train_out["mid_price_clean"].to_numpy(dtype=float) if len(train_out) else np.array([])
+    y_test = test_out["mid_price_clean"].to_numpy(dtype=float) if len(test_out) else np.array([])
+
+    errs: dict[str, dict[str, float]] = {}
+    for model in models:
+        col = price_cols[model]
+        p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
+        p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
+        e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
+        e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
+        errs[model] = dict(
+            rmse_train=float(e_tr["rmse"]),
+            mae_train=float(e_tr["mae"]),
+            rmse_test=float(e_te["rmse"]),
+            mae_test=float(e_te["mae"]),
+        )
+
+    n_total = int(len(df_out))
+    n_test = int(len(test_out))
+'''
+          if old_metrics not in text:
+              raise SystemExit('snapshot metrics block not found')
+          text = text.replace(old_metrics, new_metrics)
+          text = text.replace('            rmse_validation=model_errs["rmse_validation"],\n            mae_validation=model_errs["mae_validation"],\n', '')
+          text = text.replace('            n_total=n_total, n_train=n_train, n_validation=n_validation, n_test=n_test,\n', '            n_total=n_total, n_train=n_train, n_test=n_test,\n')
+          text = text.replace('        "validation_df": validation_out,\n', '')
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('src/batch_runner.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('    VALIDATION_SHEET,\n', '')
+          text = text.replace('    train_frac: float = 0.60\n    validation_frac: float = 0.20\n    test_frac: float = 0.20\n', '    train_frac: float = 0.70\n    test_frac: float = 0.30\n')
+          text = text.replace('            validation_frac=float(self.validation_frac),\n', '')
+          text = text.replace('            rmse_validation=float("nan"),\n            mae_validation=float("nan"),\n', '')
+          text = text.replace('            n_validation=0,\n', '')
+          text = text.replace('            "validation_df": pd.DataFrame(),\n', '')
+          text = text.replace('                            validation_frac=cfg.validation_frac,\n', '')
+          text = text.replace('            append_df(workbook, VALIDATION_SHEET, pld.get("validation_df", pd.DataFrame()))\n', '')
+          marker = '# ---------------------------------------------------------------------------\n# Configuration\n# ---------------------------------------------------------------------------\n\n\n'
+          constants = 'WLS_LAMBDA_TS = 0.0\nPWLS_LAMBDA_TS = 1.0\n\n\n'
+          if constants not in text:
+              text = text.replace(marker, marker + constants)
+          text = text.replace('    "BatchConfig",\n', '    "WLS_LAMBDA_TS",\n    "PWLS_LAMBDA_TS",\n    "BatchConfig",\n')
+          p.write_text(text, encoding='utf-8')
+          PY
+      - run: pip install -r requirements.txt
+      - name: Run targeted Stage 1 tests
+        run: >-
+          python -m unittest
+          tests.test_snapshot_splitting
+          tests.test_results_store_io
+          tests.test_batch_regularization_sequence
+          tests.test_analysis_window
+          -v
+      - name: Commit migration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/stage1-apply-core.yml
+          git add src/snapshot_job.py src/batch_runner.py .github/workflows/stage1-apply-core.yml
+          git commit -m "feat: migrate core pipeline to 70-30 train-test"
+          git push origin HEAD:stage1-70-30-core
