@@ -15,6 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
+from src.analysis_window import normalize_analysis_window
 from src.calibration import _build_pricing_plan, _price_with_plan
 from src.greeks import (
     black_regular_delta,
@@ -69,6 +70,8 @@ class HedgingConfig:
     calibration_xlsx: Path
     data_dir: Path
     output_xlsx: Path
+    analysis_start: Any = None
+    analysis_end: Any = None
     hedge_price_file: str | None = None
     funding_file: str | None = None
     dynamic_b: bool = True
@@ -93,10 +96,13 @@ class HedgingConfig:
     def __post_init__(self) -> None:
         if int(self.rebalance_every_n_snapshots) < 1:
             raise ValueError("rebalance_every_n_snapshots must be >= 1")
-        allowed = {"train", "validation", "test"}
+        start_ts, end_ts = normalize_analysis_window(self.analysis_start, self.analysis_end)
+        object.__setattr__(self, "analysis_start", start_ts)
+        object.__setattr__(self, "analysis_end", end_ts)
+        allowed = {"train", "test"}
         requested = tuple(str(x).lower() for x in self.evaluation_splits)
         if not requested or not set(requested).issubset(allowed):
-            raise ValueError("evaluation_splits must contain train/validation/test only")
+            raise ValueError("evaluation_splits must contain train/test only")
         object.__setattr__(self, "evaluation_splits", requested)
 
 
@@ -224,6 +230,11 @@ def combine_option_sheets(
 
 def filter_options_for_run(options: pd.DataFrame, cfg: HedgingConfig) -> pd.DataFrame:
     out = options.copy()
+    out["snapshot_ts"] = pd.to_datetime(out["snapshot_ts"], utc=True, errors="coerce")
+    if cfg.analysis_start is not None:
+        out = out[out["snapshot_ts"] >= cfg.analysis_start].copy()
+    if cfg.analysis_end is not None:
+        out = out[out["snapshot_ts"] <= cfg.analysis_end].copy()
     if cfg.currencies:
         allowed = {str(x).upper() for x in cfg.currencies}
         out = out[out["currency"].isin(allowed)].copy()
@@ -245,7 +256,12 @@ def build_param_lookup(workbook: dict[str, pd.DataFrame]) -> dict[tuple[str, str
     return lookup
 
 
-def list_snapshot_files(data_dir: Path) -> pd.DataFrame:
+def list_snapshot_files(
+    data_dir: Path,
+    *,
+    analysis_start: Any = None,
+    analysis_end: Any = None,
+) -> pd.DataFrame:
     rows = []
     for path in sorted(data_dir.glob("deribit_options_snapshot_*.csv")):
         match = TS_RE.search(path.name)
@@ -254,9 +270,19 @@ def list_snapshot_files(data_dir: Path) -> pd.DataFrame:
                 "snapshot_ts": pd.to_datetime(match.group(1), format="%Y%m%dT%H%M%S", utc=True),
                 "csv_path": path,
             })
-    out = pd.DataFrame(rows).sort_values("snapshot_ts").reset_index(drop=True)
-    if out.empty:
+    if not rows:
         raise FileNotFoundError(f"No deribit_options_snapshot_*.csv found under {data_dir}")
+    out = pd.DataFrame(rows)
+    start_ts, end_ts = normalize_analysis_window(analysis_start, analysis_end)
+    if start_ts is not None:
+        out = out[out["snapshot_ts"] >= start_ts].copy()
+    if end_ts is not None:
+        out = out[out["snapshot_ts"] <= end_ts].copy()
+    out = out.sort_values("snapshot_ts").reset_index(drop=True)
+    if out.empty:
+        raise FileNotFoundError(
+            f"No option snapshots remain under {data_dir} inside the configured analysis window"
+        )
     return out
 
 
@@ -853,6 +879,8 @@ def make_notes(cfg: HedgingConfig, panel: pd.DataFrame, perp: pd.DataFrame, fund
         ("calibration_xlsx", str(cfg.calibration_xlsx)),
         ("data_dir", str(cfg.data_dir)),
         ("output_xlsx", str(cfg.output_xlsx)),
+        ("analysis_start", None if cfg.analysis_start is None else _iso_z(cfg.analysis_start)),
+        ("analysis_end", None if cfg.analysis_end is None else _iso_z(cfg.analysis_end)),
         ("hedge_price_file", used_perp_file),
         ("hedge_price_source", ",".join(sorted(perp["price_source"].dropna().astype(str).unique())) if "price_source" in perp.columns else None),
         ("hedge_price_kind", ",".join(sorted(perp["price_kind"].dropna().astype(str).unique())) if "price_kind" in perp.columns else None),
@@ -976,7 +1004,11 @@ def run_hedging_analysis(cfg: HedgingConfig) -> dict[str, pd.DataFrame]:
         outer.update(1)
 
         outer.set_description("attach evaluation snapshot")
-        snapshot_index = list_snapshot_files(cfg.data_dir)
+        snapshot_index = list_snapshot_files(
+            cfg.data_dir,
+            analysis_start=cfg.analysis_start,
+            analysis_end=cfg.analysis_end,
+        )
         options = attach_evaluation_snapshot_data(options, snapshot_index, rebalance_every_n_snapshots=cfg.rebalance_every_n_snapshots)
         outer.update(1)
 
