@@ -18,7 +18,22 @@ if str(ROOT / "notebooks") not in sys.path:
 from _lib import stage2_workflow as stage2_mod
 import src.batch_runner as batch_mod
 from src.batch_runner import BatchConfig
-from src.results_store import SHEET_NAMES, init_empty_workbook
+from src.results_store import (
+    PARAM_SHEET_BLACK,
+    PARAM_SHEET_HESTON,
+    PARAM_SHEET_SVCJ,
+    TEST_SHEET,
+    TRAIN_SHEET,
+    init_empty_workbook,
+)
+
+SHEET_NAMES = (
+    PARAM_SHEET_BLACK,
+    PARAM_SHEET_HESTON,
+    PARAM_SHEET_SVCJ,
+    TRAIN_SHEET,
+    TEST_SHEET,
+)
 
 
 class ParallelCheckpointExecutionTests(unittest.TestCase):
