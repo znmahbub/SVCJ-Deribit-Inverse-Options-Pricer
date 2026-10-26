@@ -6,6 +6,7 @@ on:
     paths:
       - "src/collect_deribit_snapshot.py"
       - "tests/test_collect_deribit_snapshot.py"
+      - "tests/test_deribit_depth_mapping.py"
       - ".github/workflows/test_deribit_collector.yml"
   push:
     branches:
@@ -31,7 +32,7 @@ jobs:
 
       - name: Unit tests
         run: |
-          python -m unittest tests.test_collect_deribit_snapshot.CollectorUnitTests -v
+          python -m unittest tests.test_collect_deribit_snapshot.CollectorUnitTests tests.test_deribit_depth_mapping -v
 
       - name: Live Deribit smoke test
         env:
