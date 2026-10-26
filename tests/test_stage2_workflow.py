@@ -87,6 +87,20 @@ class Stage2WorkflowTests(unittest.TestCase):
         self.assertEqual(int(summary.loc[0, "n_missing_BTC"]), 0)
         self.assertEqual(int(summary.loc[0, "n_missing_ETH"]), 0)
 
+    def test_calibration_suite_returns_paths_not_large_workbook_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data").mkdir()
+            (root / "excel files").mkdir()
+            configs = workflow.build_calibration_configs(root, verbose=False)
+            large_sentinel = {"train_data": pd.DataFrame({"x": range(1000)})}
+            with patch.object(workflow, "run_all_snapshots_to_excel", return_value=large_sentinel) as mocked:
+                outputs = workflow.run_calibration_suite(configs)
+
+        self.assertEqual(outputs, {key: cfg.output_xlsx for key, cfg in configs.items()})
+        self.assertEqual(mocked.call_count, 2)
+        self.assertTrue(all(isinstance(path, Path) for path in outputs.values()))
+
     def test_pricing_loader_is_hard_wired_to_test_data(self) -> None:
         sentinel = (
             pd.DataFrame({"timestamp": []}),
