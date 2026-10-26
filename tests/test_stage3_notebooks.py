@@ -46,11 +46,11 @@ class Stage3NotebookTests(unittest.TestCase):
                 for symbol in required:
                     self.assertIn(symbol, text)
 
-    def test_hedging_notebook_defaults_to_pwls_test_only_full_dataset(self) -> None:
+    def test_hedging_notebook_defaults_to_both_wls_and_pwls_test_only_full_dataset(self) -> None:
         text = _source(_load("03_run_hedging.ipynb"))
         self.assertIn("START_DT = None", text)
         self.assertIn("END_DT = None", text)
-        self.assertIn("RUN_WLS = False", text)
+        self.assertIn("RUN_WLS = True", text)
         self.assertIn("RUN_PWLS = True", text)
         self.assertIn("hedging_pwls.xlsx", text)
         self.assertNotIn("validation", text.lower())
