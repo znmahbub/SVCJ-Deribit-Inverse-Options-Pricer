@@ -25,12 +25,14 @@ class RepositoryHygieneTests(unittest.TestCase):
         )
         self.assertFalse((notebooks / "_lib" / "chapter3_analysis.py").exists())
 
-    def test_workflow_surface_has_only_ci_and_data_collection(self) -> None:
+    def test_stage_branch_has_no_workflows(self) -> None:
         workflows = ROOT / ".github" / "workflows"
-        self.assertEqual(
-            {path.name for path in workflows.iterdir() if path.is_file()},
-            {"ci.yml", "collect_deribit_snapshot.yml", "update-futures-history.yml"},
+        names = (
+            {path.name for path in workflows.iterdir() if path.is_file()}
+            if workflows.exists()
+            else set()
         )
+        self.assertEqual(names, set())
 
     def test_pricing_loader_has_no_split_selection_api(self) -> None:
         self.assertNotIn(
