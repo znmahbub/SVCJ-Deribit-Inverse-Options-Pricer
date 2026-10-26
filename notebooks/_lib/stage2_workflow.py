@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Mapping
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from src.batch_runner import (
     BatchConfig,
@@ -174,7 +175,7 @@ def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, Path]
         raise ValueError(f"missing canonical calibration configs: {missing}")
 
     output_paths: dict[str, Path] = {}
-    for key in required:
+    for key in tqdm(required, desc="Calibration specifications", unit="spec", dynamic_ncols=True):
         cfg = configs[key]
         cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)
         run_all_snapshots_to_excel(cfg)
@@ -196,7 +197,7 @@ def inspect_snapshot_data(
     files = sorted(root.glob("deribit_options_snapshot_*.csv"), key=timestamp_from_filename)
     rows: list[dict[str, object]] = []
 
-    for path in files:
+    for path in tqdm(files, desc="Inspecting snapshots", unit="snapshot", dynamic_ncols=True):
         row: dict[str, object] = {
             "snapshot_filename": path.name,
             "snapshot_ts": timestamp_from_filename(path),
@@ -399,7 +400,7 @@ def run_pricing_analysis(
     overall_tables: list[pd.DataFrame] = []
     win_tables: list[pd.DataFrame] = []
 
-    for key in required:
+    for key in tqdm(required, desc="Pricing specifications", unit="spec", dynamic_ncols=True):
         run_dir = output_root / key
         report = run_single_pricing_analysis(
             Path(workbook_paths[key]),
