@@ -52,16 +52,16 @@ notebooks/pricing_outputs/canonical/
 └── pwls/
 ```
 
-Hedging defaults to PWLS; WLS is optional for direct comparison:
+Hedging runs both WLS and PWLS by default; PWLS remains the final specification:
 
 ```text
 excel files/canonical/
 ├── hedging_pwls.xlsx
-└── hedging_wls.xlsx        # optional
+└── hedging_wls.xlsx
 
 notebooks/hedging_outputs/canonical/
 ├── pwls/
-└── wls/                    # optional
+└── wls/
 ```
 
 Final package:
@@ -138,10 +138,9 @@ The maintained notebook surface under `notebooks/` is deliberately limited to `0
 
 ## Data collection
 
-Two maintained GitHub workflows remain for data acquisition:
+`stage4-5-final-validation-cleanup` is the offline analysis branch and intentionally contains no GitHub Actions workflows. The authoritative data collectors and the main-to-Stage data synchronization workflow live on `main`.
 
-- `.github/workflows/collect_deribit_snapshot.yml`
-- `.github/workflows/update-futures-history.yml`
+Before an offline run, update or replace the local `data/` directory from `main` as needed. The Stage analysis code reads the local `data/` directory and does not download data automatically.
 
 Historical perpetual hedge input in `data/perpetual_futures_prices.csv` is stored as `perp_futures_price_proxy`, with source, candle choice, time gap, resolution, and `price_kind=nearest_1m_candle_open_close` provenance where available.
 
