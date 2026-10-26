@@ -5,3 +5,4 @@ requests>=2.31
 matplotlib>=3.7
 openpyxl>=3.1
 plotly>=5.20
+tqdm>=4.66
