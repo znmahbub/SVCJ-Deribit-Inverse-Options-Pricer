@@ -300,7 +300,7 @@ def load_pricing_inputs(
     workbook_path: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load parameter panels plus the untouched 30% test holdout only."""
-    return chapter3.load_baseline_workbook(Path(workbook_path), evaluation_split="test")
+    return chapter3.load_baseline_workbook(Path(workbook_path))
 
 
 def _snapshot_win_rates(snapshot_metrics: pd.DataFrame) -> pd.DataFrame:
