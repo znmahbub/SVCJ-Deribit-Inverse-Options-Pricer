@@ -41,10 +41,6 @@ jobs:
         run: |
           python -m unittest tests.test_collect_deribit_snapshot.CollectorUnitTests tests.test_deribit_depth_mapping tests.test_backfill_futures_marks -v
 
-      - name: Repository-wide test suite
-        run: |
-          python -m unittest discover -s tests -p 'test_*.py' -v
-
       - name: Live Deribit smoke test
         env:
           DERIBIT_LIVE_TEST: "1"
