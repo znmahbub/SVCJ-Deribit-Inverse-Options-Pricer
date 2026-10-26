@@ -1,1 +1,0 @@
-Trigger focused RED verification for parallel/checkpoint execution changes.
