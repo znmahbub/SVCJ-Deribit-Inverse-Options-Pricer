@@ -19,7 +19,7 @@ UTC = dt.timezone.utc
 
 
 class CollectorUnitTests(unittest.TestCase):
-    def test_normalize_order_book_keeps_top_15_levels_per_side(self) -> None:
+    def test_normalize_order_book_keeps_top_20_levels_per_side(self) -> None:
         requested_at = dt.datetime(2026, 10, 26, 8, 0, 0, tzinfo=UTC)
         received_at = requested_at + dt.timedelta(milliseconds=125)
         payload = {
@@ -36,14 +36,14 @@ class CollectorUnitTests(unittest.TestCase):
             instrument_kind="option",
             requested_at=requested_at,
             received_at=received_at,
-            depth=15,
+            depth=20,
         )
 
-        self.assertEqual(len(rows), 30)
+        self.assertEqual(len(rows), 40)
         bids = [row for row in rows if row["side"] == "bid"]
         asks = [row for row in rows if row["side"] == "ask"]
-        self.assertEqual([row["level"] for row in bids], list(range(1, 16)))
-        self.assertEqual([row["level"] for row in asks], list(range(1, 16)))
+        self.assertEqual([row["level"] for row in bids], list(range(1, 21)))
+        self.assertEqual([row["level"] for row in asks], list(range(1, 21)))
         self.assertEqual(bids[0]["price"], 100.0)
         self.assertEqual(bids[0]["amount"], 1.0)
         self.assertEqual(asks[0]["price"], 101.0)
@@ -157,7 +157,7 @@ class CollectorUnitTests(unittest.TestCase):
             started_at=start,
             completed_at=end,
             currencies=["BTC", "ETH"],
-            order_book_depth=15,
+            order_book_depth=20,
             max_instruments=0,
             option_stats={
                 "BTC": {"discovered": 100, "selected": 100, "collected": 99, "failed": 1},
@@ -174,7 +174,8 @@ class CollectorUnitTests(unittest.TestCase):
 
         self.assertEqual(manifest["status"], "partial")
         self.assertFalse(manifest["complete"])
-        self.assertEqual(manifest["order_book_depth"], 15)
+        self.assertEqual(manifest["order_book_depth"], 20)
+        self.assertEqual(manifest["deribit_order_book_request_depth"], 20)
         self.assertEqual(manifest["failures"][0]["instrument_name"], "X")
         self.assertAlmostEqual(manifest["duration_seconds"], 10.0)
 
@@ -188,7 +189,7 @@ class CollectorUnitTests(unittest.TestCase):
             with collector.RawResponseArchive(path) as archive:
                 archive.write(
                     path="/public/get_order_book",
-                    params={"instrument_name": "BTC-PERPETUAL", "depth": 15},
+                    params={"instrument_name": "BTC-PERPETUAL", "depth": 20},
                     requested_at=requested_at,
                     received_at=received_at,
                     payload=payload,
@@ -198,7 +199,7 @@ class CollectorUnitTests(unittest.TestCase):
                 record = json.loads(fh.readline())
 
         self.assertEqual(record["path"], "/public/get_order_book")
-        self.assertEqual(record["params"]["depth"], 15)
+        self.assertEqual(record["params"]["depth"], 20)
         self.assertEqual(record["requested_at_utc"], requested_at.isoformat())
         self.assertEqual(record["received_at_utc"], received_at.isoformat())
         self.assertEqual(record["payload"], payload)
@@ -247,8 +248,9 @@ class CollectorLiveTests(unittest.TestCase):
 
             for column in ["snapshot_id", "requested_at_utc", "received_at_utc", "exchange_timestamp", "bid_amount", "ask_amount"]:
                 self.assertIn(column, options.columns)
-            self.assertLessEqual(int(books["level"].max()), 15)
-            self.assertEqual(manifest["order_book_depth"], 15)
+            self.assertLessEqual(int(books["level"].max()), 20)
+            self.assertEqual(manifest["order_book_depth"], 20)
+            self.assertEqual(manifest["deribit_order_book_request_depth"], 20)
             self.assertGreater(manifest["futures"]["BTC"]["discovered"], 0)
             self.assertGreater(len(future_files), 0)
 
