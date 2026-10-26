@@ -31,7 +31,6 @@ jobs:
       - name: Run complete unit suite on clean repository view
         run: |
           rm -f .github/workflows/temporary-100snapshot-e2e-verification.yml
-          rm -f .github/temporary_100snapshot_acceptance.py
           python -m unittest discover -s tests -v
 
       - name: Prepare latest 100 consecutive real snapshots
