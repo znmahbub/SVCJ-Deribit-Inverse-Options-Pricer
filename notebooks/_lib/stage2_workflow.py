@@ -160,19 +160,26 @@ def build_calibration_configs(
     }
 
 
-def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, dict[str, pd.DataFrame]]:
-    """Run the canonical WLS then PWLS calibration workbooks."""
+def run_calibration_suite(configs: Mapping[str, BatchConfig]) -> dict[str, Path]:
+    """Run canonical WLS then PWLS and return only their workbook paths.
+
+    ``run_all_snapshots_to_excel`` returns the full in-memory workbook payload.
+    The canonical full-sample runner deliberately discards that payload after
+    each specification is persisted so WLS data are not retained while PWLS
+    is running.
+    """
     required = tuple(canonical_calibration_specs())
     missing = [key for key in required if key not in configs]
     if missing:
         raise ValueError(f"missing canonical calibration configs: {missing}")
 
-    outputs: dict[str, dict[str, pd.DataFrame]] = {}
+    output_paths: dict[str, Path] = {}
     for key in required:
         cfg = configs[key]
         cfg.output_xlsx.parent.mkdir(parents=True, exist_ok=True)
-        outputs[key] = run_all_snapshots_to_excel(cfg)
-    return outputs
+        run_all_snapshots_to_excel(cfg)
+        output_paths[key] = cfg.output_xlsx
+    return output_paths
 
 
 def inspect_snapshot_data(
