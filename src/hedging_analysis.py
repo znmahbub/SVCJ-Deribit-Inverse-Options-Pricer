@@ -31,7 +31,6 @@ from src.results_store import (
     PARAM_SHEET_SVCJ,
     TEST_SHEET,
     TRAIN_SHEET,
-    VALIDATION_SHEET,
 )
 
 try:
@@ -163,15 +162,12 @@ def _make_progress(total: int, desc: str):
 
 def load_calibration_workbook(path: Path) -> dict[str, pd.DataFrame]:
     sheets = pd.read_excel(path, sheet_name=None, engine="openpyxl")
-    needed = [*PARAM_SHEETS.values(), TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]
+    needed = [*PARAM_SHEETS.values(), TRAIN_SHEET, TEST_SHEET]
     out: dict[str, pd.DataFrame] = {}
     for sheet in needed:
-        if sheet in sheets:
-            out[sheet] = sheets[sheet].copy()
-        elif sheet == VALIDATION_SHEET:
-            out[sheet] = pd.DataFrame()
-        else:
+        if sheet not in sheets:
             raise ValueError(f"Calibration workbook missing required sheet: {sheet}")
+        out[sheet] = sheets[sheet].copy()
     return out
 
 
@@ -181,7 +177,7 @@ def combine_option_sheets(
     splits: tuple[str, ...] = ("test",),
 ) -> pd.DataFrame:
     """Combine explicitly requested calibration splits; default is untouched test."""
-    sheet_for = {"train": TRAIN_SHEET, "validation": VALIDATION_SHEET, "test": TEST_SHEET}
+    sheet_for = {"train": TRAIN_SHEET, "test": TEST_SHEET}
     frames: list[pd.DataFrame] = []
     for split in tuple(str(x).lower() for x in splits):
         if split not in sheet_for:
