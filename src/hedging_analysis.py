@@ -351,7 +351,7 @@ def load_perp_history(data_dir: Path, filename: str | None = None) -> tuple[pd.D
 
     out = df.copy()
     out["currency"] = out["coin"].astype(str).str.upper()
-    out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce")
+    out["timestamp"] = pd.to_datetime(out["obs_datetime"], utc=True, errors="coerce").dt.floor("s")
 
     if "perp_futures_price_proxy" in out.columns:
         out["close_price"] = pd.to_numeric(out["perp_futures_price_proxy"], errors="coerce")
