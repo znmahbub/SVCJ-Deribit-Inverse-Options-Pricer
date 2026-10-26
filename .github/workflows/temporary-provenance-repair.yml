@@ -1,0 +1,163 @@
+name: temporary-provenance-repair
+
+on:
+  push:
+    branches:
+      - stage4-5-final-validation-cleanup
+    paths:
+      - .github/workflows/temporary-provenance-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage4-5-final-validation-cleanup
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Patch provenance contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/backfill_futures_marks.py')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('def _normalize_existing_perp(')
+          end = text.index('\ndef main() -> int:', start)
+          replacement = r'''def _perp_price_kind(resolution: str) -> str:
+              res = str(resolution).strip()
+              return "nearest_1m_candle_open_close" if res == "1" else f"nearest_{res}_candle_open_close"
+
+
+          def _migrate_legacy_perp_schema(existing_perp: pd.DataFrame) -> pd.DataFrame:
+              """Add canonical provenance fields while preserving legacy compatibility columns."""
+              out = existing_perp.copy()
+              if out.empty:
+                  return out
+              if "timestamp" in out.columns and "obs_datetime" not in out.columns:
+                  out["obs_datetime"] = out["timestamp"]
+              if "currency" in out.columns and "coin" not in out.columns:
+                  out["coin"] = out["currency"]
+              if "perp_futures_price_proxy" not in out.columns and "perp_futures_mark_price" in out.columns:
+                  out["perp_futures_price_proxy"] = pd.to_numeric(out["perp_futures_mark_price"], errors="coerce")
+              if "price_source" not in out.columns:
+                  if "data_source" in out.columns:
+                      out["price_source"] = out["data_source"].astype(str)
+                  else:
+                      out["price_source"] = "legacy_unknown"
+              if "price_kind" not in out.columns:
+                  is_direct = out["price_source"].astype(str).eq("deribit_snapshot")
+                  out["price_kind"] = np.where(is_direct, "deribit_snapshot_mark_price", "legacy_mark_named_candle_proxy")
+              return out
+
+
+          def _numeric_column(frame: pd.DataFrame, column: str) -> pd.Series:
+              if column not in frame.columns:
+                  return pd.Series(np.nan, index=frame.index, dtype=float)
+              return pd.to_numeric(frame[column], errors="coerce")
+
+
+          def build_perp_incremental(
+              combos: pd.DataFrame,
+              existing_perp: pd.DataFrame,
+              skip_perp_backfill: bool,
+              sleep_seconds: float,
+              max_gap_seconds: Optional[float],
+              perp_resolution: str,
+              perp_max_bars_per_call: int,
+              direct_perp_rows: Optional[pd.DataFrame] = None,
+          ) -> tuple[pd.DataFrame, pd.DataFrame]:
+              if combos.empty:
+                  return _migrate_legacy_perp_schema(existing_perp), pd.DataFrame()
+
+              requests_df = combos.copy()
+              requests_df["obs_datetime"] = requests_df["timestamp"]
+              requests_df["coin"] = requests_df["currency"].astype(str).str.upper()
+              requests_df["instrument_name"] = requests_df["coin"] + "-PERPETUAL"
+              key_cols = ["obs_datetime", "coin"]
+              existing_norm = _migrate_legacy_perp_schema(existing_perp)
+
+              direct = direct_perp_rows.copy() if direct_perp_rows is not None else pd.DataFrame()
+              if not direct.empty:
+                  direct["coin"] = direct["coin"].astype(str).str.upper()
+                  direct["perp_futures_price_proxy"] = _numeric_column(direct, "perp_futures_mark_price")
+                  direct["price_source"] = direct["data_source"].astype(str) if "data_source" in direct.columns else "deribit_snapshot"
+                  direct["price_kind"] = "deribit_snapshot_mark_price"
+                  direct = direct.drop_duplicates(subset=key_cols, keep="last")
+
+              direct_keys = direct[key_cols] if not direct.empty else pd.DataFrame(columns=key_cols)
+              unresolved = exclude_rows_by_keys(requests_df, direct_keys, key_cols)
+              if not existing_norm.empty and not unresolved.empty:
+                  existing_subset = select_rows_by_keys(existing_norm, unresolved, key_cols)
+                  if not existing_subset.empty:
+                      available = [c for c in ["perp_futures_price_proxy", "perp_futures_mark_price", "perp_futures_best_bid", "perp_futures_best_ask"] if c in existing_subset.columns]
+                      merged = unresolved.merge(existing_subset[key_cols + available], on=key_cols, how="left")
+                      proxy = _numeric_column(merged, "perp_futures_price_proxy")
+                      mark = _numeric_column(merged, "perp_futures_mark_price")
+                      bid = _numeric_column(merged, "perp_futures_best_bid")
+                      ask = _numeric_column(merged, "perp_futures_best_ask")
+                      existing_ok = proxy.notna() | mark.notna() | (bid.notna() & ask.notna())
+                      unresolved = merged.loc[~existing_ok, requests_df.columns].copy()
+
+              fallback_new = pd.DataFrame()
+              price_kind = _perp_price_kind(perp_resolution)
+              if not unresolved.empty:
+                  if skip_perp_backfill:
+                      fallback_new = unresolved.copy()
+                      fallback_new["perp_futures_price_proxy"] = pd.NA
+                      fallback_new["perp_futures_mark_price"] = pd.NA
+                      fallback_new["perp_futures_best_bid"] = pd.NA
+                      fallback_new["perp_futures_best_ask"] = pd.NA
+                      fallback_new["price_source"] = "skipped"
+                      fallback_new["price_kind"] = price_kind
+                      fallback_new["data_source"] = "skipped"
+                      for col in ["candle_found", "candle_tick_ms", "candle_open_time_ms", "candle_close_time_ms", "candle_gap_open_seconds", "candle_gap_close_seconds", "candle_price_choice", "candle_price_timestamp_ms", "candle_price_gap_seconds", "candle_open", "candle_high", "candle_low", "candle_close", "candle_volume", "candle_cost", "accepted_under_max_gap", "candle_resolution", "candle_price_used"]:
+                          fallback_new[col] = pd.NA
+                  else:
+                      fallback_new = fetch_tradingview_candles_for_requests(unresolved, "instrument_name", "snapshot_timestamp_ms", perp_resolution, sleep_seconds, max_gap_seconds, perp_max_bars_per_call, "Fetching perp candles")
+                      if not fallback_new.empty:
+                          accepted = fallback_new["accepted_under_max_gap"].fillna(False).astype(bool)
+                          proxy = np.where(accepted, pd.to_numeric(fallback_new["candle_price_used"], errors="coerce"), np.nan)
+                          fallback_new["perp_futures_price_proxy"] = proxy
+                          fallback_new["perp_futures_mark_price"] = proxy
+                          fallback_new["perp_futures_best_bid"] = pd.NA
+                          fallback_new["perp_futures_best_ask"] = pd.NA
+                          fallback_new["price_source"] = "deribit_tradingview_chart"
+                          fallback_new["price_kind"] = price_kind
+                          fallback_new["data_source"] = "tradingview_chart_open_close_nearest"
+
+              new_parts = [df for df in (direct, fallback_new) if not df.empty]
+              appended = pd.concat(new_parts, ignore_index=True, sort=False) if new_parts else pd.DataFrame()
+              if not appended.empty:
+                  appended = appended.drop(columns=["timestamp", "currency"], errors="ignore")
+              replace_keys = appended[key_cols] if not appended.empty else pd.DataFrame(columns=key_cols)
+              existing_keep = exclude_rows_by_keys(existing_norm, replace_keys, key_cols)
+              updated = concat_dedup_sort(existing_keep, appended, key_cols, ["obs_datetime", "coin"])
+              return updated, appended
+
+
+          '''
+          # The raw triple-quoted block is indented inside this workflow script; dedent it before writing.
+          import textwrap
+          replacement = textwrap.dedent(replacement)
+          path.write_text(text[:start] + replacement + text[end + 1:], encoding='utf-8')
+          PY
+      - name: Verify focused provenance tests
+        run: |
+          python -m py_compile src/backfill_futures_marks.py
+          python -m unittest -v tests.test_perp_price_provenance
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/backfill_futures_marks.py
+          git diff --cached --check
+          git commit -m "fix: restore canonical perpetual provenance schema"
+          git push origin HEAD:stage4-5-final-validation-cleanup
