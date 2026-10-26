@@ -5,20 +5,16 @@ Batch calibration pipeline.
 This module orchestrates:
 
 - enumerating snapshot CSV files
-- optional resume-from-final-Excel or per-currency Parquet checkpoints
+- optional resume-from-Excel
 - chronological warm-start processing for temporally regularized runs
 - optional multithreaded processing for unregularized runs
-- independent parallel BTC/ETH chains for temporally regularized runs
-- ordered (timestamp) committing to per-currency in-memory workbooks
-- periodic lightweight Parquet checkpointing
-- one final Excel write after all currencies finish
+- ordered (timestamp) committing to the workbook
+- periodic, atomic flushing to disk
 
 The implementation is intentionally conservative about correctness:
 
 - Worker threads may finish out-of-order, but the main thread *commits* in
   chronological order (by snapshot timestamp). This keeps resume logic safe.
-- Positive temporal regularization remains strictly sequential within each
-  currency; only independent currency chains may run concurrently.
 - Skip/failure cases still produce *parameter rows* ("Option A"), so resume
   does not retry the same snapshot forever.
 """
@@ -97,7 +93,7 @@ class BatchConfig:
 
     ``analysis_start`` and ``analysis_end`` freeze a paper/research run to an
     explicit inclusive UTC window before resume logic or smoke-test truncation
-    is applied. Date-only end values include the whole UTC calendar day.
+    is applied.  Date-only end values include the whole UTC calendar day.
     """
 
     # Paths
@@ -181,6 +177,7 @@ class BatchConfig:
         )
         self.save_every_n_files = int(self.save_every_n_files)
         self.n_workers = int(self.n_workers)
+        # Validate the configured fractions once at construction time.
         SplitConfig(
             train_frac=float(self.train_frac),
             test_frac=float(self.test_frac),
@@ -189,18 +186,19 @@ class BatchConfig:
 
 
 # ---------------------------------------------------------------------------
-# File discovery and checkpoint helpers
+# File discovery
 # ---------------------------------------------------------------------------
 
 
 def list_snapshot_files(data_dir: Path) -> list[Path]:
     files = sorted(data_dir.glob("deribit_options_snapshot_*.csv"))
-    files = [f for f in files if not f.name.startswith("._")]
+    files = [f for f in files if not f.name.startswith("._")]  # macOS metadata
     return files
 
 
 def _make_chunks(seq: list[Path], k: int) -> list[tuple[int, list[Path]]]:
     """Contiguous chunks to preserve time ordering within each worker."""
+
     n = len(seq)
     chunks: list[tuple[int, list[Path]]] = []
     for w in range(k):
@@ -324,7 +322,9 @@ def _chunk_warm_start_from_workbook(
     wb: dict[str, pd.DataFrame], *, currency: str, ts0: pd.Timestamp
 ) -> dict[str, dict[str, float]]:
     """Build warm-start params for the first file in a worker chunk."""
+
     warm: dict[str, dict[str, float]] = {}
+
     b = latest_successful_params_before(
         wb.get(PARAM_SHEET_BLACK, pd.DataFrame()),
         currency=currency,
@@ -333,6 +333,7 @@ def _chunk_warm_start_from_workbook(
     )
     if b:
         warm["black"] = b
+
     h = latest_successful_params_before(
         wb.get(PARAM_SHEET_HESTON, pd.DataFrame()),
         currency=currency,
@@ -341,6 +342,7 @@ def _chunk_warm_start_from_workbook(
     )
     if h:
         warm["heston"] = h
+
     s = latest_successful_params_before(
         wb.get(PARAM_SHEET_SVCJ, pd.DataFrame()),
         currency=currency,
@@ -349,6 +351,7 @@ def _chunk_warm_start_from_workbook(
     )
     if s:
         warm["svcj"] = s
+
     return warm
 
 
