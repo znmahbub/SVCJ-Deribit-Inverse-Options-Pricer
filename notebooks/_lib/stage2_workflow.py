@@ -43,8 +43,9 @@ REQUIRED_SNAPSHOT_COLUMNS = {
     "expiry_datetime",
 }
 
-CANONICAL_EXCEL_SUBDIR = "canonical"
-CANONICAL_PRICING_OUTPUT_SUBDIR = Path("pricing_outputs") / "canonical"
+CANONICAL_OUTPUT_SUBDIR = Path("outputs") / "canonical"
+CANONICAL_EXCEL_SUBDIR = CANONICAL_OUTPUT_SUBDIR
+CANONICAL_PRICING_OUTPUT_SUBDIR = CANONICAL_OUTPUT_SUBDIR / "pricing"
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def canonical_calibration_specs() -> dict[str, CalibrationSpec]:
 
 def canonical_calibration_paths(project_root: Path) -> dict[str, Path]:
     root = Path(project_root).resolve()
-    output_dir = root / "excel files" / CANONICAL_EXCEL_SUBDIR
+    output_dir = root / CANONICAL_OUTPUT_SUBDIR
     return {
         key: output_dir / spec.workbook_name
         for key, spec in canonical_calibration_specs().items()
@@ -441,6 +442,7 @@ def run_pricing_analysis(
 __all__ = [
     "CalibrationSpec",
     "REQUIRED_SNAPSHOT_COLUMNS",
+    "CANONICAL_OUTPUT_SUBDIR",
     "CANONICAL_EXCEL_SUBDIR",
     "CANONICAL_PRICING_OUTPUT_SUBDIR",
     "canonical_calibration_specs",
