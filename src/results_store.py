@@ -1,9 +1,7 @@
-"""Persistence helpers for calibration outputs.
+"""Persistence helpers for canonical calibration outputs.
 
-New calibration workbooks contain model parameter sheets plus deterministic
-``train_data`` and ``test_data`` option sheets. Legacy three-way workbooks are
-read tolerantly; their validation sheet and validation-only parameter columns
-are ignored by the active schema.
+Calibration workbooks contain model parameter sheets plus deterministic
+``train_data`` and ``test_data`` option sheets.
 """
 from __future__ import annotations
 
@@ -22,10 +20,6 @@ PARAM_SHEET_HESTON = "heston_params"
 PARAM_SHEET_SVCJ = "svcj_params"
 TRAIN_SHEET = "train_data"
 TEST_SHEET = "test_data"
-
-# Legacy name retained only so old analysis modules can import it while the
-# repository is migrated. New workbooks never create or write this sheet.
-VALIDATION_SHEET = "validation_data"
 
 
 PARAM_COLS_COMMON = [
@@ -100,7 +94,7 @@ def _empty_df(cols: list[str]) -> pd.DataFrame:
 
 
 def init_empty_workbook() -> Dict[str, pd.DataFrame]:
-    """Return an empty workbook using the active train/test schema."""
+    """Return an empty workbook using the canonical train/test schema."""
     return {
         PARAM_SHEET_BLACK: _empty_df(PARAM_COLS_BLACK),
         PARAM_SHEET_HESTON: _empty_df(PARAM_COLS_HESTON),
@@ -117,7 +111,7 @@ def normalize_timestamp_series(s: pd.Series) -> pd.Series:
 
 
 def ensure_param_columns(df: pd.DataFrame, expected_cols: list[str]) -> pd.DataFrame:
-    """Normalize a parameter sheet to the active schema, dropping legacy extras."""
+    """Normalize a parameter sheet to the canonical schema, dropping extras."""
     out = df.copy() if df is not None else pd.DataFrame()
     for c in expected_cols:
         if c not in out.columns:
@@ -137,7 +131,7 @@ def order_train_test_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
-    """Load an active or legacy workbook into the train/test schema."""
+    """Load a workbook into the canonical train/test schema."""
     if not path.exists():
         return init_empty_workbook()
 
@@ -151,7 +145,6 @@ def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
         if sheet_name in sheets:
             wb[sheet_name] = ensure_param_columns(sheets[sheet_name], expected_cols)
 
-    # Legacy validation_data, if present, is deliberately not carried forward.
     for sheet_name in (TRAIN_SHEET, TEST_SHEET):
         if sheet_name in sheets:
             wb[sheet_name] = sheets[sheet_name].copy()
@@ -213,10 +206,9 @@ def latest_successful_params_before(
 
 
 def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> None:
-    """Write the active train/test workbook schema atomically."""
+    """Write the canonical train/test workbook schema atomically."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Explicit sheet set prevents legacy validation sheets from being rewritten.
     wb_to_write: Dict[str, pd.DataFrame] = {
         PARAM_SHEET_BLACK: ensure_param_columns(wb.get(PARAM_SHEET_BLACK, pd.DataFrame()), PARAM_COLS_BLACK),
         PARAM_SHEET_HESTON: ensure_param_columns(wb.get(PARAM_SHEET_HESTON, pd.DataFrame()), PARAM_COLS_HESTON),
@@ -270,7 +262,7 @@ def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> Non
 
 __all__ = [
     "PARAM_SHEET_BLACK", "PARAM_SHEET_HESTON", "PARAM_SHEET_SVCJ",
-    "TRAIN_SHEET", "TEST_SHEET", "VALIDATION_SHEET",
+    "TRAIN_SHEET", "TEST_SHEET",
     "PARAM_COLS_BLACK", "PARAM_COLS_HESTON", "PARAM_COLS_SVCJ",
     "init_empty_workbook", "load_existing_workbook",
     "get_latest_processed_timestamp", "latest_successful_params_before",
