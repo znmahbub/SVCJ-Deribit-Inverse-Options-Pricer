@@ -1,24 +1,10 @@
-"""src.results_store
+"""Persistence helpers for calibration outputs.
 
-Persistence helpers for calibration outputs.
-
-This module owns the schema for ``calibration_results.xlsx`` and provides:
-
-- creation of an empty workbook (as a dict of DataFrames)
-- loading an existing workbook (schema-tolerant)
-- appending new rows (params + train/validation/test option rows)
-- crash-safe (atomic) flushing to disk
-
-Design goals
-------------
-- **Resume-safe**: the batch runner uses the latest timestamp present in
-  ``black_params`` as the resume key.
-- **Robust to schema evolution**: if columns are missing in an existing
-  workbook, we add them.
-- **Crash-safe writes**: flushing writes to a temp file and atomically replaces
-  the target file.
+New calibration workbooks contain model parameter sheets plus deterministic
+``train_data`` and ``test_data`` option sheets. Legacy three-way workbooks are
+read tolerantly; their validation sheet and validation-only parameter columns
+are ignored by the active schema.
 """
-
 from __future__ import annotations
 
 import os
@@ -31,21 +17,19 @@ import numpy as np
 import pandas as pd
 
 
-# ---------------------------------------------------------------------------
-# Workbook schema
-# ---------------------------------------------------------------------------
-
 PARAM_SHEET_BLACK = "black_params"
 PARAM_SHEET_HESTON = "heston_params"
 PARAM_SHEET_SVCJ = "svcj_params"
-
 TRAIN_SHEET = "train_data"
-VALIDATION_SHEET = "validation_data"
 TEST_SHEET = "test_data"
+
+# Legacy name retained only so old analysis modules can import it while the
+# repository is migrated. New workbooks never create or write this sheet.
+VALIDATION_SHEET = "validation_data"
 
 
 PARAM_COLS_COMMON = [
-    "timestamp",  # snapshot timestamp from filename (ISO string, UTC with trailing 'Z')
+    "timestamp",
     "currency",
     "success",
     "message",
@@ -54,13 +38,10 @@ PARAM_COLS_COMMON = [
     "mae_fit",
     "rmse_train",
     "mae_train",
-    "rmse_validation",
-    "mae_validation",
     "rmse_test",
     "mae_test",
     "n_options_total",
     "n_train",
-    "n_validation",
     "n_test",
     "random_seed",
     "regularization_active",
@@ -78,21 +59,10 @@ PARAM_COLS_COMMON = [
 PARAM_COLS_BLACK = PARAM_COLS_COMMON + ["sigma"]
 PARAM_COLS_HESTON = PARAM_COLS_COMMON + ["kappa", "theta", "sigma_v", "rho", "v0"]
 PARAM_COLS_SVCJ = PARAM_COLS_COMMON + [
-    "kappa",
-    "theta",
-    "sigma_v",
-    "rho",
-    "v0",
-    "lam",
-    "ell_y",
-    "sigma_y",
-    "ell_v",
-    "rho_j",
+    "kappa", "theta", "sigma_v", "rho", "v0",
+    "lam", "ell_y", "sigma_y", "ell_v", "rho_j",
 ]
 
-
-# Preferred (front) columns for train/validation/test sheets; any other columns will be
-# appended after these.
 TRAIN_TEST_FRONT_COLS = [
     "snapshot_ts",
     "currency",
@@ -118,47 +88,36 @@ TRAIN_TEST_FRONT_COLS = [
 
 @dataclass(frozen=True)
 class WorkbookSchema:
-    """Lightweight container for sheet/column definitions."""
-
     param_sheet_black: str = PARAM_SHEET_BLACK
     param_sheet_heston: str = PARAM_SHEET_HESTON
     param_sheet_svcj: str = PARAM_SHEET_SVCJ
     train_sheet: str = TRAIN_SHEET
-    validation_sheet: str = VALIDATION_SHEET
     test_sheet: str = TEST_SHEET
 
 
 def _empty_df(cols: list[str]) -> pd.DataFrame:
-    # Keep object dtype to be friendly to Excel roundtrips.
     return pd.DataFrame({c: pd.Series(dtype="object") for c in cols})
 
 
 def init_empty_workbook() -> Dict[str, pd.DataFrame]:
-    """Return an empty workbook dict with the expected sheets present."""
-
+    """Return an empty workbook using the active train/test schema."""
     return {
         PARAM_SHEET_BLACK: _empty_df(PARAM_COLS_BLACK),
         PARAM_SHEET_HESTON: _empty_df(PARAM_COLS_HESTON),
         PARAM_SHEET_SVCJ: _empty_df(PARAM_COLS_SVCJ),
         TRAIN_SHEET: pd.DataFrame(),
-        VALIDATION_SHEET: pd.DataFrame(),
         TEST_SHEET: pd.DataFrame(),
     }
 
 
 def normalize_timestamp_series(s: pd.Series) -> pd.Series:
-    """Normalize a timestamp series to ISO strings (UTC with trailing 'Z')."""
-
     dt = pd.to_datetime(s, utc=True, errors="coerce")
     out = dt.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    # preserve existing values when parsing fails
-    out = out.where(out.notna(), s.astype(str))
-    return out
+    return out.where(out.notna(), s.astype(str))
 
 
 def ensure_param_columns(df: pd.DataFrame, expected_cols: list[str]) -> pd.DataFrame:
-    """Ensure the param sheet has the expected columns (adds missing)."""
-
+    """Normalize a parameter sheet to the active schema, dropping legacy extras."""
     out = df.copy() if df is not None else pd.DataFrame()
     for c in expected_cols:
         if c not in out.columns:
@@ -170,26 +129,20 @@ def ensure_param_columns(df: pd.DataFrame, expected_cols: list[str]) -> pd.DataF
 
 
 def order_train_test_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Put important columns first; keep the rest in stable (sorted) order."""
-
     if df is None or len(df) == 0:
         return df if df is not None else pd.DataFrame()
     front = [c for c in TRAIN_TEST_FRONT_COLS if c in df.columns]
-    rest = [c for c in df.columns if c not in front]
-    rest_sorted = sorted(rest)
-    return df[front + rest_sorted]
+    rest = sorted(c for c in df.columns if c not in front)
+    return df[front + rest]
 
 
 def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
-    """Load an existing workbook if present, otherwise return an empty one."""
-
+    """Load an active or legacy workbook into the train/test schema."""
     if not path.exists():
         return init_empty_workbook()
 
     sheets = pd.read_excel(path, sheet_name=None, engine="openpyxl")
     wb = init_empty_workbook()
-
-    # params sheets: enforce schema
     for sheet_name, expected_cols in [
         (PARAM_SHEET_BLACK, PARAM_COLS_BLACK),
         (PARAM_SHEET_HESTON, PARAM_COLS_HESTON),
@@ -198,20 +151,18 @@ def load_existing_workbook(path: Path) -> Dict[str, pd.DataFrame]:
         if sheet_name in sheets:
             wb[sheet_name] = ensure_param_columns(sheets[sheet_name], expected_cols)
 
-    # Option splits: legacy workbooks may not contain validation_data.  Such
-    # workbooks remain loadable for comparison; new writes always include it.
-    for sheet_name in (TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET):
+    # Legacy validation_data, if present, is deliberately not carried forward.
+    for sheet_name in (TRAIN_SHEET, TEST_SHEET):
         if sheet_name in sheets:
             wb[sheet_name] = sheets[sheet_name].copy()
             if "snapshot_ts" in wb[sheet_name].columns:
-                wb[sheet_name]["snapshot_ts"] = normalize_timestamp_series(wb[sheet_name]["snapshot_ts"])
-
+                wb[sheet_name]["snapshot_ts"] = normalize_timestamp_series(
+                    wb[sheet_name]["snapshot_ts"]
+                )
     return wb
 
 
 def get_latest_processed_timestamp(wb: Dict[str, pd.DataFrame], currency: str) -> Optional[pd.Timestamp]:
-    """Resume key: latest timestamp present in the black params sheet."""
-
     df = wb.get(PARAM_SHEET_BLACK, pd.DataFrame())
     if df is None or df.empty or "timestamp" not in df.columns:
         return None
@@ -219,14 +170,10 @@ def get_latest_processed_timestamp(wb: Dict[str, pd.DataFrame], currency: str) -
     if sub.empty:
         return None
     dt = pd.to_datetime(sub["timestamp"], utc=True, errors="coerce").dropna()
-    if dt.empty:
-        return None
-    return dt.max()
+    return None if dt.empty else dt.max()
 
 
 def append_df(wb: Dict[str, pd.DataFrame], sheet: str, new: pd.DataFrame) -> None:
-    """Append a DataFrame to a sheet inside the workbook dict (in-place)."""
-
     if new is None or len(new) == 0:
         return
     if sheet not in wb or wb[sheet] is None or wb[sheet].empty:
@@ -242,24 +189,18 @@ def latest_successful_params_before(
     ts0: pd.Timestamp,
     required_cols: list[str],
 ) -> Optional[dict[str, float]]:
-    """Return latest successful params row before ``ts0`` (as a float dict)."""
-
     if params_df is None or params_df.empty:
         return None
-
     sub = params_df.copy()
     sub = sub[sub["currency"].astype(str) == str(currency)]
     if sub.empty:
         return None
-
-    sub_dt = pd.to_datetime(sub["timestamp"], utc=True, errors="coerce")
-    sub = sub.assign(_ts=sub_dt)
-    sub = sub[(sub["_ts"].notna()) & (sub["_ts"] < ts0)]
+    sub = sub.assign(_ts=pd.to_datetime(sub["timestamp"], utc=True, errors="coerce"))
+    sub = sub[sub["_ts"].notna() & (sub["_ts"] < ts0)]
     if "success" in sub.columns:
         sub = sub[sub["success"] == True]  # noqa: E712
     if sub.empty:
         return None
-
     row = sub.sort_values("_ts").iloc[-1]
     out: dict[str, float] = {}
     for c in required_cols:
@@ -272,54 +213,52 @@ def latest_successful_params_before(
 
 
 def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> None:
-    """Write workbook to disk (atomic replace)."""
-
+    """Write the active train/test workbook schema atomically."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ensure stable ordering
-    wb_to_write = dict(wb)
+    # Explicit sheet set prevents legacy validation sheets from being rewritten.
+    wb_to_write: Dict[str, pd.DataFrame] = {
+        PARAM_SHEET_BLACK: ensure_param_columns(wb.get(PARAM_SHEET_BLACK, pd.DataFrame()), PARAM_COLS_BLACK),
+        PARAM_SHEET_HESTON: ensure_param_columns(wb.get(PARAM_SHEET_HESTON, pd.DataFrame()), PARAM_COLS_HESTON),
+        PARAM_SHEET_SVCJ: ensure_param_columns(wb.get(PARAM_SHEET_SVCJ, pd.DataFrame()), PARAM_COLS_SVCJ),
+        TRAIN_SHEET: order_train_test_columns(wb.get(TRAIN_SHEET, pd.DataFrame())),
+        TEST_SHEET: order_train_test_columns(wb.get(TEST_SHEET, pd.DataFrame())),
+    }
 
-    for sheet_name, expected_cols in [
-        (PARAM_SHEET_BLACK, PARAM_COLS_BLACK),
-        (PARAM_SHEET_HESTON, PARAM_COLS_HESTON),
-        (PARAM_SHEET_SVCJ, PARAM_COLS_SVCJ),
-    ]:
-        wb_to_write[sheet_name] = ensure_param_columns(wb_to_write.get(sheet_name, pd.DataFrame()), expected_cols)
-
-    # sort param sheets
-    for sh in [PARAM_SHEET_BLACK, PARAM_SHEET_HESTON, PARAM_SHEET_SVCJ]:
+    for sh in (PARAM_SHEET_BLACK, PARAM_SHEET_HESTON, PARAM_SHEET_SVCJ):
         df = wb_to_write[sh].copy()
         if len(df):
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
             df = df.sort_values(["currency", "timestamp_dt"]).drop(columns=["timestamp_dt"])
         wb_to_write[sh] = df
 
-    # order option-split columns
-    for sh in [TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]:
-        wb_to_write[sh] = order_train_test_columns(wb_to_write.get(sh, pd.DataFrame()))
-
-    # sort option-split rows
-    for sh in [TRAIN_SHEET, VALIDATION_SHEET, TEST_SHEET]:
-        df = wb_to_write.get(sh, pd.DataFrame()).copy()
+    for sh in (TRAIN_SHEET, TEST_SHEET):
+        df = wb_to_write[sh].copy()
         if len(df):
-            df["_snapshot_dt"] = pd.to_datetime(df.get("snapshot_ts", pd.Series([pd.NaT] * len(df))), utc=True, errors="coerce")
-            df["_expiry_dt"] = pd.to_datetime(df.get("expiry_datetime", pd.Series([pd.NaT] * len(df))), utc=True, errors="coerce")
+            df["_snapshot_dt"] = pd.to_datetime(
+                df.get("snapshot_ts", pd.Series([pd.NaT] * len(df))),
+                utc=True,
+                errors="coerce",
+            )
+            df["_expiry_dt"] = pd.to_datetime(
+                df.get("expiry_datetime", pd.Series([pd.NaT] * len(df))),
+                utc=True,
+                errors="coerce",
+            )
             sort_cols = ["currency", "_snapshot_dt", "_expiry_dt"]
             if "strike" in df.columns:
                 sort_cols.append("strike")
-            df = df.sort_values(sort_cols)
-            df = df.drop(columns=[c for c in ["_snapshot_dt", "_expiry_dt"] if c in df.columns])
+            df = df.sort_values(sort_cols).drop(columns=["_snapshot_dt", "_expiry_dt"])
         wb_to_write[sh] = df
 
     with NamedTemporaryFile("wb", suffix=".xlsx", delete=False) as tmp:
         tmp_path = Path(tmp.name)
-
     try:
         with pd.ExcelWriter(tmp_path, engine="openpyxl") as writer:
             for sheet_name, df in wb_to_write.items():
-                if df is None:
-                    df = pd.DataFrame()
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                (df if df is not None else pd.DataFrame()).to_excel(
+                    writer, sheet_name=sheet_name, index=False
+                )
         os.replace(tmp_path, output_path)
     finally:
         if tmp_path.exists():
@@ -330,21 +269,11 @@ def flush_workbook_atomic(wb: Dict[str, pd.DataFrame], output_path: Path) -> Non
 
 
 __all__ = [
-    "PARAM_SHEET_BLACK",
-    "PARAM_SHEET_HESTON",
-    "PARAM_SHEET_SVCJ",
-    "TRAIN_SHEET",
-    "VALIDATION_SHEET",
-    "TEST_SHEET",
-    "PARAM_COLS_BLACK",
-    "PARAM_COLS_HESTON",
-    "PARAM_COLS_SVCJ",
-    "init_empty_workbook",
-    "load_existing_workbook",
-    "get_latest_processed_timestamp",
-    "latest_successful_params_before",
-    "append_df",
-    "flush_workbook_atomic",
-    "order_train_test_columns",
+    "PARAM_SHEET_BLACK", "PARAM_SHEET_HESTON", "PARAM_SHEET_SVCJ",
+    "TRAIN_SHEET", "TEST_SHEET", "VALIDATION_SHEET",
+    "PARAM_COLS_BLACK", "PARAM_COLS_HESTON", "PARAM_COLS_SVCJ",
+    "init_empty_workbook", "load_existing_workbook",
+    "get_latest_processed_timestamp", "latest_successful_params_before",
+    "append_df", "flush_workbook_atomic", "order_train_test_columns",
     "ensure_param_columns",
 ]
