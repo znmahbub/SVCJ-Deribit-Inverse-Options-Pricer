@@ -30,142 +30,48 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def exact(text: str, old: str, new: str, label: str) -> str:
-              if old not in text:
-                  return text
-              return text.replace(old, new)
-
-          # snapshot_job.py: two-way train/test API and payload.
+          # snapshot_job.py: two-way train/test API, metrics, and payload.
           p = Path('src/snapshot_job.py')
           text = p.read_text(encoding='utf-8')
           text = text.replace(
               'Assigns a deterministic train/validation/test cross-sectional split.',
               'Assigns a deterministic 70/30 train/test cross-sectional split.',
           )
-          text = text.replace('    validation_frac: float,\n', '')
           text = text.replace(
               '      - ``train_df`` / ``validation_df`` / ``test_df``: priced option rows',
               '      - ``train_df`` / ``test_df``: priced option rows',
           )
-          text = text.replace('        rmse_validation: float,\n        mae_validation: float,\n', '')
-          text = text.replace('        n_validation: int,\n', '')
           text = text.replace(
-              '            rmse_validation=float(rmse_validation) if rmse_validation is not None else float("nan"),\n'
-              '            mae_validation=float(mae_validation) if mae_validation is not None else float("nan"),\n',
-              '',
+              '                n_total=int(n_total), n_train=0, n_validation=0, n_test=0,',
+              '                n_total=int(n_total), n_train=0, n_test=0,',
           )
-          text = text.replace('            n_validation=int(n_validation),\n', '')
-          text = text.replace('                rmse_validation=np.nan, mae_validation=np.nan,\n', '')
           text = text.replace(
-              '                n_total=int(n_total), n_train=0, n_validation=0, n_test=0,\n',
-              '                n_total=int(n_total), n_train=0, n_test=0,\n',
+              '            n_total=n_total, n_train=n_train, n_validation=n_validation, n_test=n_test,',
+              '            n_total=n_total, n_train=n_train, n_test=n_test,',
           )
-          text = text.replace('            "validation_df": empty_tt,\n', '')
-
-          old_split = '''    # Deterministic within-snapshot three-way cross-sectional split.  The split
-          # is assigned once and then reused by every model; model choice never resplits.
-          df_filt = df_filt.reset_index(drop=True).copy()
-          split_cfg = SplitConfig(
-              train_frac=float(train_frac),
-              validation_frac=float(validation_frac),
-              test_frac=float(test_frac),
-              random_seed=int(random_seed),
+          # Every remaining validation reference belongs to the retired third split;
+          # all such constructs are line-local after the two compound replacements above.
+          text = ''.join(
+              line for line in text.splitlines(keepends=True)
+              if 'validation' not in line.lower()
           )
-          df_filt["split"] = assign_cross_sectional_split(df_filt, split_cfg).to_numpy()
-          n_total_rows = int(len(df_filt))
-          train = df_filt.loc[df_filt["split"] == "train"].copy()
-          validation = df_filt.loc[df_filt["split"] == "validation"].copy()
-          test = df_filt.loc[df_filt["split"] == "test"].copy()
-          n_train = int(len(train))
-          n_validation = int(len(validation))
-          '''
-          new_split = '''    # Deterministic within-snapshot train/test split. The split is assigned once
-          # and reused by every model; calibration always uses train only.
-          df_filt = df_filt.reset_index(drop=True).copy()
-          split_cfg = SplitConfig(
-              train_frac=float(train_frac),
-              test_frac=float(test_frac),
-              random_seed=int(random_seed),
+          text = text.replace(
+              '    # Deterministic within-snapshot three-way cross-sectional split.  The split\n',
+              '    # Deterministic within-snapshot 70/30 train/test split. The split\n',
           )
-          df_filt["split"] = assign_cross_sectional_split(df_filt, split_cfg).to_numpy()
-          train = df_filt.loc[df_filt["split"] == "train"].copy()
-          test = df_filt.loc[df_filt["split"] == "test"].copy()
-          n_train = int(len(train))
-          '''
-          text = exact(text, old_split, new_split, 'split block')
           text = text.replace(
               '    # Reprice full snapshot once per model, then reuse the frozen three-way split.',
               '    # Reprice full snapshot once per model, then reuse the frozen train/test split.',
           )
-
-          old_metrics = '''    train_out = df_out.loc[df_out["split"] == "train"].copy()
-          validation_out = df_out.loc[df_out["split"] == "validation"].copy()
-          test_out = df_out.loc[df_out["split"] == "test"].copy()
-
-          # Errors (unweighted) are reported separately for all three splits.
-          y_train = train_out["mid_price_clean"].to_numpy(dtype=float) if len(train_out) else np.array([])
-          y_validation = validation_out["mid_price_clean"].to_numpy(dtype=float) if len(validation_out) else np.array([])
-          y_test = test_out["mid_price_clean"].to_numpy(dtype=float) if len(test_out) else np.array([])
-
-          errs: dict[str, dict[str, float]] = {}
-          for model in models:
-              col = price_cols[model]
-              p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
-              p_validation = validation_out[col].to_numpy(dtype=float) if len(validation_out) else np.array([])
-              p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
-              e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
-              e_va = compute_errors(y_validation, p_validation) if len(validation_out) else {"rmse": np.nan, "mae": np.nan}
-              e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
-              errs[model] = dict(
-                  rmse_train=float(e_tr["rmse"]),
-                  mae_train=float(e_tr["mae"]),
-                  rmse_validation=float(e_va["rmse"]),
-                  mae_validation=float(e_va["mae"]),
-                  rmse_test=float(e_te["rmse"]),
-                  mae_test=float(e_te["mae"]),
-              )
-
-          n_total = int(len(df_out))
-          n_validation = int(len(validation_out))
-          n_test = int(len(test_out))
-          '''
-          new_metrics = '''    train_out = df_out.loc[df_out["split"] == "train"].copy()
-          test_out = df_out.loc[df_out["split"] == "test"].copy()
-
-          # Unweighted reporting errors are kept separately for train and test.
-          y_train = train_out["mid_price_clean"].to_numpy(dtype=float) if len(train_out) else np.array([])
-          y_test = test_out["mid_price_clean"].to_numpy(dtype=float) if len(test_out) else np.array([])
-
-          errs: dict[str, dict[str, float]] = {}
-          for model in models:
-              col = price_cols[model]
-              p_train = train_out[col].to_numpy(dtype=float) if len(train_out) else np.array([])
-              p_test = test_out[col].to_numpy(dtype=float) if len(test_out) else np.array([])
-              e_tr = compute_errors(y_train, p_train) if len(train_out) else {"rmse": np.nan, "mae": np.nan}
-              e_te = compute_errors(y_test, p_test) if len(test_out) else {"rmse": np.nan, "mae": np.nan}
-              errs[model] = dict(
-                  rmse_train=float(e_tr["rmse"]),
-                  mae_train=float(e_tr["mae"]),
-                  rmse_test=float(e_te["rmse"]),
-                  mae_test=float(e_te["mae"]),
-              )
-
-          n_total = int(len(df_out))
-          n_test = int(len(test_out))
-          '''
-          text = exact(text, old_metrics, new_metrics, 'metrics block')
-          text = text.replace('            rmse_validation=model_errs["rmse_validation"],\n            mae_validation=model_errs["mae_validation"],\n', '')
           text = text.replace(
-              '            n_total=n_total, n_train=n_train, n_validation=n_validation, n_test=n_test,\n',
-              '            n_total=n_total, n_train=n_train, n_test=n_test,\n',
+              '    # Errors (unweighted) are reported separately for all three splits.',
+              '    # Unweighted reporting errors are kept separately for train and test.',
           )
-          text = text.replace('        "validation_df": validation_out,\n', '')
           p.write_text(text, encoding='utf-8')
 
           # batch_runner.py: active defaults 70/30 and canonical lambda constants.
           p = Path('src/batch_runner.py')
           text = p.read_text(encoding='utf-8')
-          text = text.replace('    VALIDATION_SHEET,\n', '')
           marker = '# ---------------------------------------------------------------------------\n# Configuration\n# ---------------------------------------------------------------------------\n\n\n'
           constants = 'WLS_LAMBDA_TS = 0.0\nPWLS_LAMBDA_TS = 1.0\n\n\n'
           if 'WLS_LAMBDA_TS = 0.0' not in text:
@@ -174,14 +80,13 @@ jobs:
               '    train_frac: float = 0.60\n    validation_frac: float = 0.20\n    test_frac: float = 0.20\n',
               '    train_frac: float = 0.70\n    test_frac: float = 0.30\n',
           )
-          text = text.replace('            validation_frac=float(self.validation_frac),\n', '')
-          text = text.replace('            rmse_validation=float("nan"),\n            mae_validation=float("nan"),\n', '')
-          text = text.replace('            n_validation=0,\n', '')
-          text = text.replace('            "validation_df": pd.DataFrame(),\n', '')
-          text = text.replace('                            validation_frac=cfg.validation_frac,\n', '')
           text = text.replace(
-              '            append_df(workbook, VALIDATION_SHEET, pld.get("validation_df", pd.DataFrame()))\n',
-              '',
+              '            n_options_total=0,\n            n_train=0,\n            n_validation=0,\n            n_test=0,',
+              '            n_options_total=0,\n            n_train=0,\n            n_test=0,',
+          )
+          text = ''.join(
+              line for line in text.splitlines(keepends=True)
+              if 'validation' not in line.lower()
           )
           if '    "WLS_LAMBDA_TS",' not in text:
               text = text.replace(
