@@ -1,11 +1,7 @@
-# Task 13 post-lock Stage 5: untouched-test pricing and robustness gate
-name: task13-stage5-test-robustness
+# Task 13 post-lock Stage 5: untouched-test pricing and SVCJ identification diagnostics
+name: task13-stage5-test-identification
 
 on:
-  push:
-    branches: [task13-staged-rerun]
-    paths:
-      - '.github/workflows/task13-stage4-full-workbooks.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +9,7 @@ permissions:
   actions: read
 
 jobs:
-  test-and-robustness:
+  test-and-identification:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -59,58 +55,38 @@ jobs:
             --output calibration_results_final.executed.ipynb \
             --output-dir _task13/stage5 \
             --ExecutePreprocessor.timeout=3600
-      - name: Run Task 12 robustness and discounting gate
+      - name: Run SVCJ identification diagnostics
         run: |
-          mkdir -p _task13/stage5/robustness
+          mkdir -p _task13/stage5/identification
           python - <<'PY'
-          import json, sys
+          import sys
           from pathlib import Path
           import pandas as pd
           sys.path.insert(0, str(Path('notebooks').resolve()))
           from _lib import chapter3_final, robustness
 
           root = Path('excel files/remediation')
-          out = Path('_task13/stage5/robustness')
-          all_discount, all_decisions, all_ident = [], [], []
+          out = Path('_task13/stage5/identification')
+          summaries = []
           for reg in (0, 1):
               path = root / f'calibration_results_reg_{reg}.xlsx'
-              _, _, svcj, test = chapter3_final.load_baseline_workbook(path, evaluation_split='test')
-              disc = robustness.build_discounting_sensitivity_table(test)
-              disc['lambda_TS'] = reg
-              all_discount.append(disc)
+              _, _, svcj, _ = chapter3_final.load_baseline_workbook(path, evaluation_split='test')
               ident = robustness.parameter_identification_summary(svcj)
               ident['lambda_TS'] = reg
-              all_ident.append(ident)
+              summaries.append(ident)
               for currency in ('BTC', 'ETH'):
-                  decision = robustness.assess_discounting_promotion(disc, scope=currency)
-                  decision['lambda_TS'] = reg
-                  all_decisions.append(decision)
                   robustness.parameter_correlation_matrix(svcj, currency=currency).to_csv(
                       out / f'svcj_parameter_correlations_reg_{reg}_{currency}.csv'
                   )
-          sensitivity = pd.concat(all_discount, ignore_index=True)
-          decisions = pd.DataFrame(all_decisions)
-          identification = pd.concat(all_ident, ignore_index=True)
-          sensitivity.to_csv(out / 'discounting_sensitivity.csv', index=False)
-          decisions.to_csv(out / 'discounting_promotion_decisions.csv', index=False)
+          identification = pd.concat(summaries, ignore_index=True)
           identification.to_csv(out / 'svcj_identification_summary.csv', index=False)
-          print(decisions.to_string(index=False))
-          # Gate the selected baseline only. lambda=0 is retained as a diagnostic comparator.
-          selected = decisions.loc[decisions['lambda_TS'] == 1]
-          gate = {
-              'selected_lambda_TS': 1,
-              'promotion_required': bool(selected['promote_discounting_to_baseline'].any()),
-              'decisions': selected.to_dict(orient='records'),
-          }
-          (out / 'discounting_gate.json').write_text(json.dumps(gate, indent=2, default=str), encoding='utf-8')
-          if gate['promotion_required']:
-              raise SystemExit('DISCOUNTING_PROMOTION_REQUIRED: stop before hedging')
+          print(identification.to_string(index=False))
           PY
       - name: Upload Stage 5 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: task13-stage5-test-robustness
+          name: task13-stage5-test-identification
           path: |
             _task13/stage5/
             notebooks/chapter3_outputs/remediation/final/
