@@ -7,11 +7,11 @@ on:
       - 'src/hedging_analysis.py'
       - 'src/hedging_analytics.py'
       - 'notebooks/**'
-      - 'tests/test_stage3_*.py'
+      - 'tests/**'
       - '.github/workflows/stage3-targeted-tests.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -21,61 +21,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: stage3-hedging-final-runners
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Apply hedging analysis-window contract if needed
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('src/hedging_analysis.py')
-          text = p.read_text(encoding='utf-8')
-
-          if 'from src.analysis_window import normalize_analysis_window\n' not in text:
-              marker = 'from src.calibration import _build_pricing_plan, _price_with_plan\n'
-              if marker not in text:
-                  raise SystemExit('analysis-window import insertion point not found')
-              text = text.replace(marker, 'from src.analysis_window import normalize_analysis_window\n' + marker, 1)
-
-          old_fields = '''    output_xlsx: Path\n    hedge_price_file: str | None = None\n'''
-          new_fields = '''    output_xlsx: Path\n    analysis_start: Any = None\n    analysis_end: Any = None\n    hedge_price_file: str | None = None\n'''
-          if old_fields in text:
-              text = text.replace(old_fields, new_fields, 1)
-
-          old_post = '''        if int(self.rebalance_every_n_snapshots) < 1:\n            raise ValueError("rebalance_every_n_snapshots must be >= 1")\n        allowed = {"train", "validation", "test"}\n        requested = tuple(str(x).lower() for x in self.evaluation_splits)\n        if not requested or not set(requested).issubset(allowed):\n            raise ValueError("evaluation_splits must contain train/validation/test only")\n        object.__setattr__(self, "evaluation_splits", requested)\n'''
-          new_post = '''        if int(self.rebalance_every_n_snapshots) < 1:\n            raise ValueError("rebalance_every_n_snapshots must be >= 1")\n        start_ts, end_ts = normalize_analysis_window(self.analysis_start, self.analysis_end)\n        object.__setattr__(self, "analysis_start", start_ts)\n        object.__setattr__(self, "analysis_end", end_ts)\n        allowed = {"train", "test"}\n        requested = tuple(str(x).lower() for x in self.evaluation_splits)\n        if not requested or not set(requested).issubset(allowed):\n            raise ValueError("evaluation_splits must contain train/test only")\n        object.__setattr__(self, "evaluation_splits", requested)\n'''
-          if old_post in text:
-              text = text.replace(old_post, new_post, 1)
-
-          old_filter = '''def filter_options_for_run(options: pd.DataFrame, cfg: HedgingConfig) -> pd.DataFrame:\n    out = options.copy()\n    if cfg.currencies:\n        allowed = {str(x).upper() for x in cfg.currencies}\n        out = out[out["currency"].isin(allowed)].copy()\n    if cfg.max_snapshot_groups is not None:\n        unique_ts = np.sort(out["snapshot_ts"].dropna().unique())\n        keep_ts = set(unique_ts[: int(cfg.max_snapshot_groups)])\n        out = out[out["snapshot_ts"].isin(keep_ts)].copy()\n    return out.sort_values(["snapshot_ts", "currency", "instrument_name"]).reset_index(drop=True)\n'''
-          new_filter = '''def filter_options_for_run(options: pd.DataFrame, cfg: HedgingConfig) -> pd.DataFrame:\n    out = options.copy()\n    out["snapshot_ts"] = pd.to_datetime(out["snapshot_ts"], utc=True, errors="coerce")\n    if cfg.analysis_start is not None:\n        out = out[out["snapshot_ts"] >= cfg.analysis_start].copy()\n    if cfg.analysis_end is not None:\n        out = out[out["snapshot_ts"] <= cfg.analysis_end].copy()\n    if cfg.currencies:\n        allowed = {str(x).upper() for x in cfg.currencies}\n        out = out[out["currency"].isin(allowed)].copy()\n    if cfg.max_snapshot_groups is not None:\n        unique_ts = np.sort(out["snapshot_ts"].dropna().unique())\n        keep_ts = set(unique_ts[: int(cfg.max_snapshot_groups)])\n        out = out[out["snapshot_ts"].isin(keep_ts)].copy()\n    return out.sort_values(["snapshot_ts", "currency", "instrument_name"]).reset_index(drop=True)\n'''
-          if old_filter in text:
-              text = text.replace(old_filter, new_filter, 1)
-
-          old_list = '''def list_snapshot_files(data_dir: Path) -> pd.DataFrame:\n    rows = []\n    for path in sorted(data_dir.glob("deribit_options_snapshot_*.csv")):\n        match = TS_RE.search(path.name)\n        if match:\n            rows.append({\n                "snapshot_ts": pd.to_datetime(match.group(1), format="%Y%m%dT%H%M%S", utc=True),\n                "csv_path": path,\n            })\n    out = pd.DataFrame(rows).sort_values("snapshot_ts").reset_index(drop=True)\n    if out.empty:\n        raise FileNotFoundError(f"No deribit_options_snapshot_*.csv found under {data_dir}")\n    return out\n'''
-          new_list = '''def list_snapshot_files(\n    data_dir: Path,\n    *,\n    analysis_start: Any = None,\n    analysis_end: Any = None,\n) -> pd.DataFrame:\n    rows = []\n    for path in sorted(data_dir.glob("deribit_options_snapshot_*.csv")):\n        match = TS_RE.search(path.name)\n        if match:\n            rows.append({\n                "snapshot_ts": pd.to_datetime(match.group(1), format="%Y%m%dT%H%M%S", utc=True),\n                "csv_path": path,\n            })\n    if not rows:\n        raise FileNotFoundError(f"No deribit_options_snapshot_*.csv found under {data_dir}")\n    out = pd.DataFrame(rows)\n    start_ts, end_ts = normalize_analysis_window(analysis_start, analysis_end)\n    if start_ts is not None:\n        out = out[out["snapshot_ts"] >= start_ts].copy()\n    if end_ts is not None:\n        out = out[out["snapshot_ts"] <= end_ts].copy()\n    out = out.sort_values("snapshot_ts").reset_index(drop=True)\n    if out.empty:\n        raise FileNotFoundError(\n            f"No option snapshots remain under {data_dir} inside the configured analysis window"\n        )\n    return out\n'''
-          if old_list in text:
-              text = text.replace(old_list, new_list, 1)
-
-          old_snapshot_call = '        snapshot_index = list_snapshot_files(cfg.data_dir)\n'
-          new_snapshot_call = '''        snapshot_index = list_snapshot_files(\n            cfg.data_dir,\n            analysis_start=cfg.analysis_start,\n            analysis_end=cfg.analysis_end,\n        )\n'''
-          if old_snapshot_call in text:
-              text = text.replace(old_snapshot_call, new_snapshot_call, 1)
-
-          old_notes = '''        ("output_xlsx", str(cfg.output_xlsx)),\n        ("hedge_price_file", used_perp_file),\n'''
-          new_notes = '''        ("output_xlsx", str(cfg.output_xlsx)),\n        ("analysis_start", None if cfg.analysis_start is None else _iso_z(cfg.analysis_start)),\n        ("analysis_end", None if cfg.analysis_end is None else _iso_z(cfg.analysis_end)),\n        ("hedge_price_file", used_perp_file),\n'''
-          if old_notes in text:
-              text = text.replace(old_notes, new_notes, 1)
-
-          p.write_text(text, encoding='utf-8')
-          PY
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install tqdm nbformat nbclient jupyter-client ipykernel
       - name: Stage 3 targeted tests
         run: >-
           python -m unittest
@@ -83,16 +36,5 @@ jobs:
           tests.test_stage3_workflow
           tests.test_stage3_notebooks
           -v
-      - name: Commit window fix when green
-        if: success()
-        shell: bash
-        run: |
-          if git diff --quiet -- src/hedging_analysis.py; then
-            echo 'Hedging window code already committed.'
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/hedging_analysis.py
-          git commit -m "fix: bound hedging forward lookup to analysis window"
-          git push origin HEAD:stage3-hedging-final-runners
+      - name: Full regression suite
+        run: python -m unittest discover -s tests -v
