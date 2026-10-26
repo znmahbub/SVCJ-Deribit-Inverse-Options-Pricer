@@ -7,6 +7,7 @@ on:
       - 'notebooks/**'
       - 'tests/test_stage2_workflow.py'
       - 'tests/test_stage2_notebooks.py'
+      - 'tests/test_stage2_pricing_diagnostics.py'
       - '.github/workflows/stage2-targeted-tests.yml'
 
 permissions:
@@ -24,4 +25,9 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - name: Run Stage 2 targeted tests
-        run: python -m unittest tests.test_stage2_workflow tests.test_stage2_notebooks -v
+        run: >-
+          python -m unittest
+          tests.test_stage2_workflow
+          tests.test_stage2_notebooks
+          tests.test_stage2_pricing_diagnostics
+          -v
