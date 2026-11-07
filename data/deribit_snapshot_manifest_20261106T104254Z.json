@@ -1,0 +1,52 @@
+{
+  "snapshot_id": "20261106T104254Z",
+  "started_at_utc": "2026-11-06T10:42:54.481120+00:00",
+  "completed_at_utc": "2026-11-06T10:48:16.189464+00:00",
+  "duration_seconds": 321.708344,
+  "currencies": [
+    "BTC",
+    "ETH"
+  ],
+  "order_book_depth": 20,
+  "deribit_order_book_request_depth": 20,
+  "max_option_instruments": 0,
+  "full_option_universe_requested": true,
+  "status": "complete",
+  "complete": true,
+  "options": {
+    "BTC": {
+      "discovered": 938,
+      "selected": 938,
+      "collected": 938,
+      "failed": 0
+    },
+    "ETH": {
+      "discovered": 804,
+      "selected": 804,
+      "collected": 804,
+      "failed": 0
+    }
+  },
+  "futures": {
+    "BTC": {
+      "discovered": 13,
+      "selected": 13,
+      "collected": 13,
+      "failed": 0
+    },
+    "ETH": {
+      "discovered": 13,
+      "selected": 13,
+      "collected": 13,
+      "failed": 0
+    }
+  },
+  "failures": [],
+  "output_files": {
+    "options": "data/deribit_options_snapshot_20261106T104254Z.csv",
+    "futures": "data/deribit_futures_snapshot_20261106T104254Z.csv",
+    "order_books": "data/deribit_order_book_snapshot_20261106T104254Z.csv.gz",
+    "manifest": "data/deribit_snapshot_manifest_20261106T104254Z.json"
+  },
+  "raw_archive": "data/raw/deribit/20261106T104254Z/api_responses.jsonl.gz"
+}
