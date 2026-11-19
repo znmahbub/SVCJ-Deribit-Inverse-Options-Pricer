@@ -1,0 +1,1131 @@
+{
+  "snapshot_id": "20261119T180946Z",
+  "started_at_utc": "2026-11-19T18:09:46.560110+00:00",
+  "completed_at_utc": "2026-11-19T18:15:10.840080+00:00",
+  "duration_seconds": 324.27997,
+  "currencies": [
+    "BTC",
+    "ETH"
+  ],
+  "order_book_depth": 20,
+  "deribit_order_book_request_depth": 20,
+  "max_option_instruments": 0,
+  "full_option_universe_requested": true,
+  "status": "partial",
+  "complete": false,
+  "options": {
+    "BTC": {
+      "discovered": 972,
+      "selected": 972,
+      "collected": 898,
+      "failed": 74
+    },
+    "ETH": {
+      "discovered": 798,
+      "selected": 798,
+      "collected": 718,
+      "failed": 80
+    }
+  },
+  "futures": {
+    "BTC": {
+      "discovered": 13,
+      "selected": 13,
+      "collected": 13,
+      "failed": 0
+    },
+    "ETH": {
+      "discovered": 13,
+      "selected": 13,
+      "collected": 13,
+      "failed": 0
+    }
+  },
+  "failures": [
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-72000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-72000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-77000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-77000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-81000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-81000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-86000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-86000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-90000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-90000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-95000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-95000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-99000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-99000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-27NOV26-108000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-27NOV26-108000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-4DEC26-50000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-4DEC26-50000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-4DEC26-62000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-4DEC26-62000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-4DEC26-67000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-4DEC26-67000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-11DEC26-60000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-11DEC26-60000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-11DEC26-64000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-11DEC26-64000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-11DEC26-70000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-11DEC26-70000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-50000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-50000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-58000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-58000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-66000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-66000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-74000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-74000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-82000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-82000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-88000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-88000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-96000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-96000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-110000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-110000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-130000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-130000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-160000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-160000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-210000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-210000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25DEC26-250000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25DEC26-250000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-52000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-52000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-58000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-58000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-62000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-62000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-66000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-66000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-70000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-70000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-75000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-75000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-79000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-79000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-83000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-83000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-90000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-90000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-94000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-94000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-100000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-100000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-29JAN27-106000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-29JAN27-106000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-35000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-35000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-54000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-54000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-60000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-60000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-66000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-66000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-74000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-74000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-80000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-80000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-86000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-86000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-95000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-95000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-104000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-104000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-112000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-112000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-130000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-130000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-26MAR27-180000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-26MAR27-180000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-45000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-45000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-56000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-56000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-64000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-64000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-72000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-72000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-82000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-82000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-88000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-88000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-102000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-102000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-108000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-108000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-116000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-116000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-135000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-135000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-25JUN27-170000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-25JUN27-170000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-35000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-35000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-55000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-55000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-64000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-64000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-70000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-70000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-78000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-78000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-86000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-86000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-94000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-94000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-100000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-100000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-106000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-106000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-114000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-114000-C&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-120000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-120000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-170000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-170000-P&depth=20"
+    },
+    {
+      "currency": "BTC",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "BTC-24SEP27-210000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=BTC-24SEP27-210000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-1840-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-1840-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-1950-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-1950-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-2050-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-2050-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-2200-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-2200-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-2450-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-2450-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-20NOV26-2700-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-20NOV26-2700-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-21NOV26-1620-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-21NOV26-1620-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-21NOV26-1700-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-21NOV26-1700-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-21NOV26-1840-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-21NOV26-1840-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-21NOV26-1940-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-21NOV26-1940-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-21NOV26-2100-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-21NOV26-2100-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-22NOV26-1650-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-22NOV26-1650-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-22NOV26-1720-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-22NOV26-1720-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-22NOV26-1800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-22NOV26-1800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-22NOV26-1880-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-22NOV26-1880-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-23NOV26-1620-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-23NOV26-1620-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-23NOV26-1680-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-23NOV26-1680-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-23NOV26-1780-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-23NOV26-1780-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-23NOV26-1880-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-23NOV26-1880-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-23NOV26-2000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-23NOV26-2000-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-1500-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-1500-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-1700-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-1700-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-1950-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-1950-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-2150-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-2150-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-2450-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-2450-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-2700-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-2700-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-2900-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-2900-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-3150-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-3150-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-3600-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-3600-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-27NOV26-4600-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-27NOV26-4600-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-4DEC26-1600-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-4DEC26-1600-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-4DEC26-1800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-4DEC26-1800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-4DEC26-2050-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-4DEC26-2050-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-4DEC26-2300-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-4DEC26-2300-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-11DEC26-1650-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-11DEC26-1650-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-11DEC26-2200-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-11DEC26-2200-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-1300-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-1300-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-1800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-1800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-2300-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-2300-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-2700-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-2700-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-3200-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-3200-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-3600-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-3600-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-4400-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-4400-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-5000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-5000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-7000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-7000-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25DEC26-11000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25DEC26-11000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-1600-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-1600-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-1800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-1800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-2050-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-2050-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-2300-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-2300-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-2550-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-2550-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-2900-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-2900-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-29JAN27-3800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-29JAN27-3800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-1000-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-1000-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-1500-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-1500-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-1900-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-1900-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-2400-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-2400-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-2700-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-2700-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-3100-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-3100-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-3600-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-3600-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-4400-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-4400-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-26MAR27-6000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-26MAR27-6000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-900-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-900-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-1500-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-1500-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-1900-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-1900-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-2300-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-2300-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-2800-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-2800-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-3200-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-3200-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-3600-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-3600-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-4000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-4000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-4500-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-4500-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-25JUN27-5500-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-25JUN27-5500-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-1200-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-1200-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-1800-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-1800-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-2200-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-2200-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-2600-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-2600-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-3000-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-3000-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-3600-P",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-3600-P&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-4500-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-4500-C&depth=20"
+    },
+    {
+      "currency": "ETH",
+      "kind": "option",
+      "stage": "get_order_book",
+      "instrument_name": "ETH-24SEP27-5500-C",
+      "error": "HTTPError: 429 Client Error: Too Many Requests for url: https://www.deribit.com/api/v2/public/get_order_book?instrument_name=ETH-24SEP27-5500-C&depth=20"
+    }
+  ],
+  "output_files": {
+    "options": "data/deribit_options_snapshot_20261119T180946Z.csv",
+    "futures": "data/deribit_futures_snapshot_20261119T180946Z.csv",
+    "order_books": "data/deribit_order_book_snapshot_20261119T180946Z.csv.gz",
+    "manifest": "data/deribit_snapshot_manifest_20261119T180946Z.json"
+  },
+  "raw_archive": "data/raw/deribit/20261119T180946Z/api_responses.jsonl.gz"
+}
